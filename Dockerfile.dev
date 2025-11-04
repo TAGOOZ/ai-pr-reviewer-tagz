@@ -1,0 +1,45 @@
+# Development Dockerfile with all tools and dependencies
+
+FROM rust:1.75-slim
+
+WORKDIR /workspace
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libpq-dev \
+    build-essential \
+    curl \
+    git \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust tools
+RUN rustup component add rustfmt clippy rust-src
+RUN cargo install cargo-watch cargo-edit cargo-audit
+
+# Install Python tools
+RUN pip3 install poetry pre-commit
+
+# Install Node.js tools for any frontend development
+RUN npm install -g typescript ts-node
+
+# Set up Git (for pre-commit hooks)
+RUN git config --global --add safe.directory /workspace
+
+# Create development user
+RUN useradd -m -s /bin/bash dev
+USER dev
+
+# Set up shell
+RUN echo 'alias ll="ls -la"' >> ~/.bashrc
+RUN echo 'alias la="ls -la"' >> ~/.bashrc
+
+WORKDIR /workspace
+
+CMD ["bash"]

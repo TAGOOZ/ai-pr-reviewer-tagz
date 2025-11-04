@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: coderabbit
+      POSTGRES_USER: coderabbit
+      POSTGRES_PASSWORD: coderabbit_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coderabbit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://coderabbit:coderabbit_dev@postgres:5432/coderabbit
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=info
+      - ENVIRONMENT=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+  # Python AI Pipeline Service
+  ai-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m coderabbit_ai.server
+    ports:
+      - "8081:8081"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./python:/app/python
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+  # Development tools container
+  dev-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/workspace
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/workspace/target
+    working_dir: /workspace
+    command: sleep infinity
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+  redis_data:
+  cargo_cache:
+  target_cache:

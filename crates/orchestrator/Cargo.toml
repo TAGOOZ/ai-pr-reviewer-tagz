@@ -1,0 +1,19 @@
+[package]
+name = "coderabbit-orchestrator"
+version = "0.1.0"
+authors = ["CodeRabbit Team <team@coderabbit.ai>"]
+edition = "2021"
+
+[dependencies]
+coderabbit-shared = { path = "../shared" }
+coderabbit-code-analyzer = { path = "../code-analyzer" }
+tracing = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
+uuid = { workspace = true }
+chrono = { workspace = true }
+

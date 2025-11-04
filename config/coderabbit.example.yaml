@@ -1,0 +1,173 @@
+# CodeRabbit Configuration File Example
+# Place this file as .coderabbit.yaml in your repository root
+
+# Review settings
+reviews:
+  # Automatically review PRs when opened/updated
+  auto_review: true
+
+  # Minimum severity level to report: debug, info, warning, error, critical
+  min_severity: warning
+
+  # Maximum number of comments per PR (prevents spam)
+  max_comments: 50
+
+  # Comment style: inline, summary, or both
+  comment_style: inline
+
+  # Request changes on errors (sets PR status to "changes requested")
+  request_changes_on_error: true
+
+  # Auto-approve PRs with no issues
+  auto_approve_no_issues: false
+
+  # Post summary comment with overview
+  post_summary: true
+
+  # Review test files
+  review_tests: true
+
+# Files and paths to ignore
+ignore:
+  # File patterns (glob syntax)
+  files:
+    - "*.generated.ts"
+    - "*.gen.go"
+    - "**/*.test.js"
+    - "**/__snapshots__/*"
+    - "*.lock"
+
+  # Directories to skip
+  directories:
+    - node_modules
+    - dist
+    - build
+    - vendor
+    - .git
+    - target
+
+  # Specific paths
+  paths:
+    - "src/generated/api.ts"
+    - "pkg/proto/generated.go"
+
+  # File extensions to ignore
+  extensions:
+    - min.js
+    - bundle.js
+    - map
+
+# Language-specific settings
+languages:
+  # Rust configuration
+  rust:
+    enabled: true
+    min_severity: warning
+    ignore:
+      - "**/target/**"
+    rules:
+      unwrap_usage:
+        enabled: true
+        severity: warning
+        message: "Consider using .expect() with a descriptive message instead of .unwrap()"
+
+      unsafe_code:
+        enabled: true
+        severity: error
+        message: "Unsafe code requires thorough review and justification"
+
+  # Python configuration
+  python:
+    enabled: true
+    min_severity: info
+    ignore:
+      - "*_pb2.py"
+      - "*_pb2_grpc.py"
+    rules:
+      bare_except:
+        enabled: true
+        severity: warning
+        message: "Use specific exception types instead of bare 'except:'"
+
+  # JavaScript/TypeScript
+  javascript:
+    enabled: true
+    ignore:
+      - "*.bundle.js"
+
+  typescript:
+    enabled: true
+    min_severity: warning
+
+# Rules configuration
+rules:
+  # Enable these rule categories globally
+  enabled:
+    - security
+    - performance
+    - best-practices
+    - bug-risk
+    - maintainability
+
+  # Disable these categories
+  disabled:
+    - style
+    - formatting
+
+  # Custom rule configurations
+  custom:
+    # Security rules
+    hardcoded_credentials:
+      enabled: true
+      severity: critical
+      message: "Potential hardcoded credentials detected"
+
+    sql_injection:
+      enabled: true
+      severity: critical
+
+    # Performance rules
+    n_plus_one_query:
+      enabled: true
+      severity: warning
+
+    inefficient_loop:
+      enabled: true
+      severity: info
+
+    # Best practices
+    magic_numbers:
+      enabled: true
+      severity: info
+      params:
+        allowed: [0, 1, -1]
+
+    long_function:
+      enabled: true
+      severity: warning
+      params:
+        max_lines: 50
+
+    high_complexity:
+      enabled: true
+      severity: warning
+      params:
+        max_complexity: 10
+
+# Chat and interaction settings
+chat:
+  # Respond to @mentions in comments
+  enabled: true
+
+  # Include code examples in responses
+  include_examples: true
+
+  # Max tokens for chat responses
+  max_response_tokens: 1000
+
+  # Chat tone: professional, friendly, or concise
+  tone: professional
+
+# Inherit settings from parent directory .coderabbit.yaml
+# Useful for monorepos with directory-specific configs
+inherit: true

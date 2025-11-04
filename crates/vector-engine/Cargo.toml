@@ -1,0 +1,42 @@
+[package]
+name = "coderabbit-vector-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+coderabbit-shared = { path = "../shared" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Vector operations and ML
+lancedb = { version = "0.22", default-features = false }
+arrow-array = "53.0"
+arrow-schema = "53.0"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# HTTP client for API calls
+reqwest = { workspace = true }
+
+# UUID and time
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Collections and data structures
+indexmap = "2.1"
+
+# Compression
+lz4_flex = "0.11"
+
+# Serialization for binary data
+bincode = "1.3"

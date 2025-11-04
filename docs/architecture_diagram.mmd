@@ -1,0 +1,108 @@
+%% AI PR Reviewer - System Architecture Diagram
+%% This diagram shows the complete flow from GitHub PR events to AI-powered reviews
+
+sequenceDiagram
+    participant User as Developer
+    participant GitHub as GitHub Repository
+    participant Actions as GitHub Actions Runner
+    participant Main as Main Controller
+    participant Options as Options Parser
+    participant Bot as AI Bot Factory
+    participant LightBot as Light Bot (GPT-3.5)
+    participant HeavyBot as Heavy Bot (GPT-4)
+    participant Review as Review Engine
+    participant Diff as Diff Parser
+    participant Files as File Processor
+    participant Prompts as Prompt Templates
+    participant Commenter as Comment Manager
+    participant API as GitHub API
+
+    %% Initial PR Event
+    User->>GitHub: Creates/Updates Pull Request
+    GitHub->>Actions: Triggers workflow (pull_request_target)
+    Actions->>Main: Executes main.ts entry point
+    
+    %% Initialization Phase
+    Main->>Options: Parse configuration & environment
+    Options-->>Main: Validated options & path filters
+    Main->>Bot: Create dual bot instances
+    Bot->>LightBot: Initialize GPT-3.5 for summaries
+    Bot->>HeavyBot: Initialize GPT-4 for reviews
+    Bot-->>Main: Bot instances ready
+    
+    %% Review Process Initiation
+    Main->>Review: Start codeReview() pipeline
+    Review->>GitHub: Fetch PR metadata & context
+    GitHub-->>Review: PR title, description, commits
+    Review->>API: Get incremental diff (base to head)
+    API-->>Review: File changes & patches
+    
+    %% File Processing Phase
+    Review->>Files: Filter & process changed files
+    Files->>Options: Apply path filters
+    Options-->>Files: Filtered file list
+    Files->>API: Fetch file contents for context
+    API-->>Files: File content & metadata
+    Files->>Diff: Split patches into reviewable chunks
+    Diff-->>Files: Structured patch data
+    Files-->>Review: Processed files ready for analysis
+    
+    %% Summarization Phase
+    loop For each file
+        Review->>Prompts: Render summarization template
+        Prompts-->>Review: Formatted prompt with context
+        Review->>LightBot: Request file summary
+        LightBot->>LightBot: Analyze changes & classify
+        LightBot-->>Review: Summary + triage (NEEDS_REVIEW/APPROVED)
+    end
+    
+    %% Batch Summary Processing
+    Review->>Prompts: Render changeset summary template
+    Prompts-->>Review: Batch summary prompt
+    Review->>HeavyBot: Consolidate file summaries
+    HeavyBot-->>Review: Consolidated summary
+    
+    %% Detailed Review Phase
+    loop For files marked NEEDS_REVIEW
+        Review->>Prompts: Render detailed review template
+        Prompts-->>Review: Review prompt with code context
+        Review->>HeavyBot: Request detailed code review
+        HeavyBot->>HeavyBot: Analyze code quality & suggest improvements
+        HeavyBot-->>Review: Line-by-line review comments
+        Review->>Commenter: Buffer review comments
+    end
+    
+    %% Comment Generation & Posting
+    Review->>Prompts: Render final summary template
+    Prompts-->>Review: Summary prompt
+    Review->>HeavyBot: Generate PR summary
+    HeavyBot-->>Review: Final PR summary
+    Review->>Commenter: Prepare all comments for posting
+    Commenter->>API: Create PR review with comments
+    API->>GitHub: Post review & line comments
+    GitHub-->>User: Notify of review completion
+    
+    %% Interactive Chat Phase (Separate Event)
+    Note over User,API: Interactive Chat Mode
+    User->>GitHub: Mentions @coderabbitai in comment
+    GitHub->>Actions: Triggers pull_request_review_comment event
+    Actions->>Main: Execute review comment handler
+    Main->>Review: Process chat request
+    Review->>Commenter: Get conversation context
+    Commenter->>API: Fetch comment chain & diff context
+    API-->>Commenter: Comment history & file context
+    Commenter-->>Review: Conversation context
+    Review->>Prompts: Render chat response template
+    Prompts-->>Review: Chat prompt with full context
+    Review->>HeavyBot: Generate contextual response
+    HeavyBot-->>Review: AI response
+    Review->>Commenter: Format reply comment
+    Commenter->>API: Post reply to conversation
+    API->>GitHub: Update comment thread
+    GitHub-->>User: Notify of AI response
+
+    %% Error Handling & Retry Logic
+    Note over LightBot,HeavyBot: Built-in retry logic for API failures
+    Note over Commenter,API: Rate limiting & throttling protection
+    Note over Review: Token limit validation before API calls
+    Note over Options: Path filtering prevents processing unwanted files

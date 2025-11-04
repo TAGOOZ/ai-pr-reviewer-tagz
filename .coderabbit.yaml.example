@@ -1,0 +1,106 @@
+# CodeRabbit Configuration Example
+# This file shows all available configuration options for the hybrid cloning system
+
+reviews:
+  auto_review: true
+  min_severity: warning
+  max_comments: 50
+  comment_style: inline  # Options: inline, summary, both
+  request_changes_on_error: true
+  auto_approve_no_issues: false
+  post_summary: true
+  review_tests: true
+
+# Static Application Security Testing (SAST) Configuration
+sast:
+  # Enable SAST scanning for security analysis
+  enabled: false  # Set to true to enable SAST
+
+  # Specific tools to run (leave empty to use all available)
+  tools:
+    - semgrep    # Multi-language security scanner
+    - gitleaks   # Secrets detection
+    - bandit     # Python security scanner (if Python files present)
+  # Available but not included by default: trivy
+
+  # Minimum severity to report
+  min_severity: medium  # Options: info, low, medium, high, critical
+
+  # Maximum scan time in seconds
+  timeout_seconds: 300  # 5 minutes
+
+  # Whether to fail PR on critical findings
+  fail_on_critical: false  # Don't block PRs by default
+
+  # Only scan security-sensitive files
+  security_files_only: false  # Scan all files
+
+# Repository Cloning Configuration
+cloning:
+  # Enable intelligent repository cloning
+  enabled: true
+
+  # Always clone (bypasses intelligent decision logic)
+  always_clone: false  # Use smart cloning decisions
+
+  # Number of files changed to trigger cloning
+  large_pr_threshold: 50
+
+  # PR labels that force cloning
+  clone_on_labels:
+    - security-review
+    - full-scan
+    - deep-analysis
+    - dependency-update
+
+  # Cache configuration
+  cache:
+    enabled: true
+    max_size_gb: 10       # Maximum cache size
+    max_age_hours: 24     # Cache entries older than this are removed
+    max_repos: 50         # Maximum number of cached repositories
+
+# Files and directories to ignore
+ignore:
+  files:
+    - "*.generated.ts"
+    - "*.min.js"
+  directories:
+    - node_modules
+    - dist
+    - build
+    - target
+    - vendor
+  extensions:
+    - min.js
+    - bundle.js
+
+# Language-specific settings
+languages:
+  rust:
+    enabled: true
+    min_severity: warning
+  python:
+    enabled: true
+    ignore:
+      - "*_pb2.py"  # Generated protobuf files
+  javascript:
+    enabled: true
+  typescript:
+    enabled: true
+
+# Custom rules
+rules:
+  enabled:
+    - security
+    - performance
+    - best-practices
+  disabled:
+    - style  # Don't review style issues
+
+# Chat settings
+chat:
+  enabled: true
+  include_examples: true
+  max_response_tokens: 1000
+  tone: professional  # Options: professional, friendly, concise

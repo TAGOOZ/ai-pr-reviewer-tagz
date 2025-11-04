@@ -1,0 +1,66 @@
+[package]
+name = "coderabbit-integration-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "coderabbit_integration_tests"
+path = "lib.rs"
+
+[dependencies]
+# Workspace crates
+coderabbit-api-gateway = { path = "../crates/api-gateway" }
+coderabbit-orchestrator = { path = "../crates/orchestrator" }
+coderabbit-cache-layer = { path = "../crates/cache-layer" }
+coderabbit-shared = { path = "../crates/shared" }
+coderabbit-vector-engine = { path = "../crates/vector-engine" }
+coderabbit-code-analyzer = { path = "../crates/code-analyzer" }
+coderabbit-security = { path = "../crates/security" }
+
+# Testing utilities
+tokio = { workspace = true }
+axum = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+base64 = "0.21"
+
+[[test]]
+name = "webhook_integration"
+path = "integration/webhook_integration.rs"
+
+[[test]]
+name = "real_api_tests"
+path = "integration/real_api_tests.rs"
+
+[[test]]
+name = "e2e_review_test"
+path = "integration/e2e_review_test.rs"
+
+[[test]]
+name = "real_pr_review"
+path = "integration/real_pr_review.rs"
+
+[[test]]
+name = "pr_commenting_test"
+path = "integration/pr_commenting_test.rs"
+
+[[test]]
+name = "cohere_embeddings_test"
+path = "integration/cohere_embeddings_test.rs"
+
+[[test]]
+name = "pr_features_test"
+path = "integration/pr_features_test.rs"
+
+[[test]]
+name = "apply_suggestion_test"
+path = "integration/apply_suggestion_test.rs"
+
+[[test]]
+name = "config_loader_test"
+path = "integration/config_loader_test.rs"
+
+[[test]]
+name = "issue_ranking_test"
+path = "integration/issue_ranking_test.rs"

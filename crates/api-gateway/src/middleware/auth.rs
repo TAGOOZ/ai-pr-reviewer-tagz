@@ -1,0 +1,454 @@
+use axum::{
+    extract::Request,
+    response::{Response, IntoResponse},
+    http::{StatusCode, HeaderMap},
+    body::Body,
+};
+use tower::{Layer, Service};
+use std::task::{Context, Poll};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm};
+use serde::{Deserialize, Serialize};
+use chrono::{Utc, Duration};
+use std::sync::Arc;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Claims {
+    pub sub: String,        // Subject (user ID)
+    pub exp: usize,         // Expiration time
+    pub iat: usize,         // Issued at
+    pub role: String,       // User role
+    pub email: String,      // User email
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenPair {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_in: i64,
+}
+
+#[derive(Clone)]
+pub struct AuthContext {
+    pub jwt_secret: Vec<u8>,
+    pub token_expiration_hours: i64,
+    pub refresh_token_expiration_days: i64,
+}
+
+impl AuthContext {
+    pub fn new(jwt_secret: String, token_expiration_hours: i64, refresh_token_expiration_days: i64) -> Self {
+        Self {
+            jwt_secret: jwt_secret.into_bytes(),
+            token_expiration_hours,
+            refresh_token_expiration_days,
+        }
+    }
+    
+    pub fn from_env() -> Self {
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .unwrap_or_else(|_| "default-secret-change-in-production".to_string());
+        let token_expiration_hours = std::env::var("TOKEN_EXPIRATION_HOURS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(24);
+        let refresh_token_expiration_days = std::env::var("REFRESH_TOKEN_EXPIRATION_DAYS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(7);
+        
+        Self::new(jwt_secret, token_expiration_hours, refresh_token_expiration_days)
+    }
+}
+
+impl Claims {
+    pub fn new(user_id: String, email: String, role: String, expiration_hours: i64) -> Self {
+        let now = Utc::now();
+        let exp = (now + Duration::hours(expiration_hours)).timestamp() as usize;
+        let iat = now.timestamp() as usize;
+        
+        Self {
+            sub: user_id,
+            exp,
+            iat,
+            role,
+            email,
+        }
+    }
+    
+    pub fn is_expired(&self) -> bool {
+        let now = Utc::now().timestamp() as usize;
+        self.exp < now
+    }
+}
+
+pub fn generate_token_pair(user_id: String, email: String, role: String, ctx: &AuthContext) -> Result<TokenPair, jsonwebtoken::errors::Error> {
+    let claims = Claims::new(user_id.clone(), email.clone(), role.clone(), ctx.token_expiration_hours);
+    let access_token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(&ctx.jwt_secret)
+    )?;
+    
+    // Refresh token with longer expiration
+    let mut refresh_claims = Claims::new(user_id, email, role, ctx.token_expiration_hours);
+    refresh_claims.exp = (Utc::now() + Duration::days(ctx.refresh_token_expiration_days)).timestamp() as usize;
+    let refresh_token = encode(
+        &Header::default(),
+        &refresh_claims,
+        &EncodingKey::from_secret(&ctx.jwt_secret)
+    )?;
+    
+    Ok(TokenPair {
+        access_token,
+        refresh_token,
+        expires_in: ctx.token_expiration_hours * 3600,
+    })
+}
+
+pub fn validate_token(token: &str, ctx: &AuthContext) -> Result<Claims, jsonwebtoken::errors::Error> {
+    let validation = Validation::new(Algorithm::HS256);
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(&ctx.jwt_secret),
+        &validation
+    )?;
+    
+    if token_data.claims.is_expired() {
+        return Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into());
+    }
+    
+    Ok(token_data.claims)
+}
+
+fn extract_token_from_header(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| {
+            if s.starts_with("Bearer ") {
+                Some(s[7..].to_string())
+            } else {
+                None
+            }
+        })
+}
+
+#[derive(Clone)]
+pub struct AuthLayer {
+    pub skip_auth: bool, // For development/testing
+    pub auth_ctx: Arc<AuthContext>,
+}
+
+impl AuthLayer {
+    pub fn new(auth_ctx: AuthContext) -> Self {
+        Self { 
+            skip_auth: false,
+            auth_ctx: Arc::new(auth_ctx),
+        }
+    }
+    
+    pub fn from_env() -> Self {
+        Self::new(AuthContext::from_env())
+    }
+    
+    pub fn with_skip_auth(auth_ctx: AuthContext, skip_auth: bool) -> Self {
+        Self { 
+            skip_auth,
+            auth_ctx: Arc::new(auth_ctx),
+        }
+    }
+}
+
+impl<S> Layer<S> for AuthLayer {
+    type Service = AuthMiddleware<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        AuthMiddleware { 
+            inner,
+            skip_auth: self.skip_auth,
+            auth_ctx: self.auth_ctx.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AuthMiddleware<S> {
+    inner: S,
+    skip_auth: bool,
+    auth_ctx: Arc<AuthContext>,
+}
+
+impl<S> Service<Request> for AuthMiddleware<S>
+where
+    S: Service<Request, Response = Response> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut request: Request) -> Self::Future {
+        let mut inner = self.inner.clone();
+        let skip_auth = self.skip_auth;
+        let auth_ctx = self.auth_ctx.clone();
+        
+        Box::pin(async move {
+            // Skip authentication if configured (dev mode)
+            if skip_auth {
+                tracing::debug!("Authentication skipped (dev mode)");
+                return inner.call(request).await;
+            }
+            
+            // Extract and validate JWT token
+            let headers = request.headers();
+            match extract_token_from_header(headers) {
+                Some(token) => {
+                    match validate_token(&token, &auth_ctx) {
+                        Ok(claims) => {
+                            tracing::debug!("Authenticated user: {}", claims.sub);
+                            // Store claims in request extensions for later use
+                            request.extensions_mut().insert(claims);
+                            inner.call(request).await
+                        }
+                        Err(e) => {
+                            tracing::warn!("Invalid token: {:?}", e);
+                            let response = Response::builder()
+                                .status(StatusCode::UNAUTHORIZED)
+                                .body(Body::from("Invalid or expired token"))
+                                .unwrap();
+                            Ok(response)
+                        }
+                    }
+                }
+                None => {
+                    tracing::warn!("No authorization header found");
+                    let response = Response::builder()
+                        .status(StatusCode::UNAUTHORIZED)
+                        .body(Body::from("Missing authorization header"))
+                        .unwrap();
+                    Ok(response)
+                }
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_auth_context() -> AuthContext {
+        AuthContext::new(
+            "test_secret_key_for_testing".to_string(),
+            24,
+            7
+        )
+    }
+
+    #[test]
+    fn test_auth_context_creation() {
+        let ctx = create_test_auth_context();
+        assert_eq!(ctx.token_expiration_hours, 24);
+        assert_eq!(ctx.refresh_token_expiration_days, 7);
+        assert_eq!(ctx.jwt_secret, b"test_secret_key_for_testing");
+    }
+
+    #[test]
+    fn test_claims_creation() {
+        let claims = Claims::new(
+            "user123".to_string(),
+            "test@example.com".to_string(),
+            "user".to_string(),
+            24
+        );
+
+        assert_eq!(claims.sub, "user123");
+        assert_eq!(claims.email, "test@example.com");
+        assert_eq!(claims.role, "user");
+        assert!(!claims.is_expired());
+    }
+
+    #[test]
+    fn test_claims_expiration() {
+        let mut claims = Claims::new(
+            "user123".to_string(),
+            "test@example.com".to_string(),
+            "user".to_string(),
+            24
+        );
+
+        // Set expiration to past
+        claims.exp = (Utc::now() - Duration::hours(1)).timestamp() as usize;
+        assert!(claims.is_expired());
+
+        // Set expiration to future
+        claims.exp = (Utc::now() + Duration::hours(1)).timestamp() as usize;
+        assert!(!claims.is_expired());
+    }
+
+    #[test]
+    fn test_generate_token_pair() {
+        let ctx = create_test_auth_context();
+        let result = generate_token_pair(
+            "user123".to_string(),
+            "test@example.com".to_string(),
+            "admin".to_string(),
+            &ctx
+        );
+
+        assert!(result.is_ok());
+        let token_pair = result.unwrap();
+        assert!(!token_pair.access_token.is_empty());
+        assert!(!token_pair.refresh_token.is_empty());
+        assert_eq!(token_pair.expires_in, 24 * 3600);
+    }
+
+    #[test]
+    fn test_validate_valid_token() {
+        let ctx = create_test_auth_context();
+        let token_pair = generate_token_pair(
+            "user456".to_string(),
+            "user@example.com".to_string(),
+            "user".to_string(),
+            &ctx
+        ).unwrap();
+
+        let result = validate_token(&token_pair.access_token, &ctx);
+        assert!(result.is_ok());
+
+        let claims = result.unwrap();
+        assert_eq!(claims.sub, "user456");
+        assert_eq!(claims.email, "user@example.com");
+        assert_eq!(claims.role, "user");
+    }
+
+    #[test]
+    fn test_validate_invalid_token() {
+        let ctx = create_test_auth_context();
+        let result = validate_token("invalid.token.here", &ctx);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_token_wrong_secret() {
+        let ctx1 = create_test_auth_context();
+        let ctx2 = AuthContext::new("different_secret".to_string(), 24, 7);
+
+        let token_pair = generate_token_pair(
+            "user789".to_string(),
+            "test@example.com".to_string(),
+            "user".to_string(),
+            &ctx1
+        ).unwrap();
+
+        // Try to validate with different secret
+        let result = validate_token(&token_pair.access_token, &ctx2);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_extract_token_from_header_valid() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "Authorization",
+            "Bearer test_token_12345".parse().unwrap()
+        );
+
+        let token = extract_token_from_header(&headers);
+        assert_eq!(token, Some("test_token_12345".to_string()));
+    }
+
+    #[test]
+    fn test_extract_token_from_header_no_bearer() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "Authorization",
+            "test_token_12345".parse().unwrap()
+        );
+
+        let token = extract_token_from_header(&headers);
+        assert_eq!(token, None);
+    }
+
+    #[test]
+    fn test_extract_token_from_header_missing() {
+        let headers = HeaderMap::new();
+        let token = extract_token_from_header(&headers);
+        assert_eq!(token, None);
+    }
+
+    #[test]
+    fn test_auth_layer_creation() {
+        let ctx = create_test_auth_context();
+        let layer = AuthLayer::new(ctx);
+        assert!(!layer.skip_auth);
+    }
+
+    #[test]
+    fn test_auth_layer_with_skip() {
+        let ctx = create_test_auth_context();
+        let layer = AuthLayer::with_skip_auth(ctx, true);
+        assert!(layer.skip_auth);
+    }
+
+    #[test]
+    fn test_refresh_token_longer_expiration() {
+        let ctx = create_test_auth_context();
+        let token_pair = generate_token_pair(
+            "user123".to_string(),
+            "test@example.com".to_string(),
+            "user".to_string(),
+            &ctx
+        ).unwrap();
+
+        // Validate both tokens
+        let access_claims = validate_token(&token_pair.access_token, &ctx).unwrap();
+        let refresh_claims = validate_token(&token_pair.refresh_token, &ctx).unwrap();
+
+        // Refresh token should have longer expiration
+        assert!(refresh_claims.exp > access_claims.exp);
+    }
+
+    #[test]
+    fn test_token_contains_all_user_data() {
+        let ctx = create_test_auth_context();
+        let token_pair = generate_token_pair(
+            "admin_user".to_string(),
+            "admin@company.com".to_string(),
+            "admin".to_string(),
+            &ctx
+        ).unwrap();
+
+        let claims = validate_token(&token_pair.access_token, &ctx).unwrap();
+
+        assert_eq!(claims.sub, "admin_user");
+        assert_eq!(claims.email, "admin@company.com");
+        assert_eq!(claims.role, "admin");
+        assert!(claims.iat > 0);
+        assert!(claims.exp > claims.iat);
+    }
+
+    #[test]
+    fn test_claims_serialization() {
+        let claims = Claims::new(
+            "user123".to_string(),
+            "test@example.com".to_string(),
+            "user".to_string(),
+            1
+        );
+
+        let json = serde_json::to_string(&claims);
+        assert!(json.is_ok());
+
+        let deserialized: Result<Claims, _> = serde_json::from_str(&json.unwrap());
+        assert!(deserialized.is_ok());
+
+        let recovered = deserialized.unwrap();
+        assert_eq!(recovered.sub, claims.sub);
+        assert_eq!(recovered.email, claims.email);
+        assert_eq!(recovered.role, claims.role);
+    }
+}

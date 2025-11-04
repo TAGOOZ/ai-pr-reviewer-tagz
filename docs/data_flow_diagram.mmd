@@ -1,0 +1,84 @@
+%% AI PR Reviewer - Data Flow Architecture
+%% This diagram shows the component relationships and data flow paths
+
+graph TD
+    %% Input Layer
+    A[GitHub PR Event] --> B[Main Entry Point<br/>main.ts]
+    B --> C[Options Parser<br/>options.ts]
+    B --> D[Bot Factory<br/>bot.ts]
+    
+    %% Configuration Layer
+    C --> E[Path Filters<br/>minimatch patterns]
+    C --> F[Token Limits<br/>limits.ts]
+    C --> G[Environment Variables<br/>API keys & settings]
+    
+    %% AI Model Layer
+    D --> H[Light Bot - GPT-3.5<br/>Summarization]
+    D --> I[Heavy Bot - GPT-4<br/>Detailed Review]
+    
+    %% Processing Engine
+    B --> J[Review Engine<br/>review.ts]
+    J --> K[Diff Parser<br/>splitPatch, parsePatch]
+    J --> L[File Processor<br/>content fetching]
+    
+    %% Data Processing Pipeline
+    K --> M[Patch Splitter<br/>hunk extraction]
+    L --> N[Content Fetcher<br/>GitHub API calls]
+    
+    %% Template System
+    O[Prompt Templates<br/>prompts.ts] --> P[Template Renderer<br/>inputs.ts]
+    P --> Q[Contextualized Prompts]
+    
+    %% Summarization Pipeline
+    M --> R[Summarization Pipeline]
+    N --> R
+    Q --> R
+    R --> H
+    H --> S[Summary Results<br/>+ Triage Classification]
+    
+    %% Review Pipeline
+    S --> T[Review Pipeline<br/>NEEDS_REVIEW files only]
+    Q --> T
+    T --> I
+    I --> U[Review Comments<br/>Line-by-line feedback]
+    
+    %% Comment Management
+    U --> V[Commenter<br/>commenter.ts]
+    S --> V
+    V --> W[Comment Buffer<br/>Batch processing]
+    W --> X[GitHub API<br/>octokit.ts]
+    X --> Y[PR Comments & Reviews]
+    
+    %% Interactive Chat Branch
+    Z[Review Comment Event] --> AA[Chat Handler<br/>review-comment.ts]
+    AA --> BB[Context Retrieval<br/>conversation chains]
+    BB --> CC[Chat Response Pipeline]
+    Q --> CC
+    CC --> I
+    I --> DD[Chat Reply]
+    DD --> V
+    
+    %% Token Management
+    EE[Tokenizer<br/>tokenizer.ts] --> FF[Token Counting]
+    FF --> R
+    FF --> T
+    FF --> CC
+    
+    %% Styling
+    style H fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style I fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style V fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style J fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style O fill:#fff8e1,stroke:#e65100,stroke-width:2px
+    style X fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    
+    %% Labels
+    classDef aiModel fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef processing fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    classDef github fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef config fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+    
+    class H,I aiModel
+    class J,K,L,M,N,R,T processing
+    class X,Y,Z,AA github
+    class C,E,F,G,O,P config

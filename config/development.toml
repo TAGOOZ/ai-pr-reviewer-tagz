@@ -1,0 +1,25 @@
+[server]
+host = "127.0.0.1"
+port = 8080
+workers = 4
+
+[database]
+url = "postgresql://coderabbit:coderabbit_dev@localhost:5432/coderabbit"
+max_connections = 10
+min_connections = 2
+connection_timeout = 30
+
+[redis]
+url = "redis://localhost:6379"
+pool_size = 10
+connection_timeout = 5
+
+[ai]
+openai_api_key = "${OPENAI_API_KEY}"
+anthropic_api_key = "${ANTHROPIC_API_KEY}"
+default_model = "gpt-3.5-turbo"
+max_tokens = 4096
+temperature = 0.7
+
+environment = "development"
+log_level = "debug"

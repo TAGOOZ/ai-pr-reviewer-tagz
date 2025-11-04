@@ -1,0 +1,25 @@
+[package]
+name = "coderabbit-shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+redis = { workspace = true }
+validator = { version = "0.16", features = ["derive"] }
+regex = "1.10"
+pyo3 = { version = "0.20", features = ["extension-module"] }
+rmp-serde = "1.1"
+tokio = { workspace = true }
+memmap2 = "0.9"
+crossbeam-channel = "0.5"
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.8"

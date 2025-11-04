@@ -1,0 +1,212 @@
+{
+  "name": "coderabbit-ai-pr-reviewer",
+  "displayName": "CodeRabbit AI PR Reviewer",
+  "description": "Real-time AI-powered code review and analysis for Visual Studio Code",
+  "version": "0.1.0",
+  "publisher": "CodeRabbit",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Extension Packs",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "code-review",
+    "machine-learning",
+    "github",
+    "pull-request",
+    "analysis",
+    "security",
+    "linting"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onCommand:extension.coderabbit.analyzeCode",
+    "onCommand:extension.coderabbit.analyzePR",
+    "onCommand:extension.coderabbit.startRealtimeAnalysis",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:python",
+    "onLanguage:rust",
+    "onLanguage:java",
+    "onLanguage:go",
+    "onLanguage:cpp"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.coderabbit.analyzeCode",
+        "title": "CodeRabbit: Analyze Current File",
+        "category": "CodeRabbit",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "extension.coderabbit.analyzePR",
+        "title": "CodeRabbit: Analyze Pull Request",
+        "category": "CodeRabbit",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "extension.coderabbit.startRealtimeAnalysis",
+        "title": "CodeRabbit: Start Real-time Analysis",
+        "category": "CodeRabbit",
+        "icon": "$(play)"
+      },
+      {
+        "command": "extension.coderabbit.stopRealtimeAnalysis",
+        "title": "CodeRabbit: Stop Real-time Analysis",
+        "category": "CodeRabbit",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "extension.coderabbit.viewReport",
+        "title": "CodeRabbit: View Analysis Report",
+        "category": "CodeRabbit",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "extension.coderabbit.configureSettings",
+        "title": "CodeRabbit: Configure Settings",
+        "category": "CodeRabbit",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "extension.coderabbit.analyzeCode",
+          "when": "editorHasSelection",
+          "group": "coderabbit@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "extension.coderabbit.analyzePR",
+          "when": "viewItem == pr",
+          "group": "coderabbit@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "extension.coderabbit.analyzeCode",
+          "when": "true"
+        },
+        {
+          "command": "extension.coderabbit.analyzePR",
+          "when": "true"
+        },
+        {
+          "command": "extension.coderabbit.viewReport",
+          "when": "true"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "coderabbitView",
+          "name": "CodeRabbit Analysis",
+          "when": "true"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "coderabbit",
+          "title": "CodeRabbit AI",
+          "icon": "$(robot)",
+          "views": [
+            "coderabbitView"
+          ]
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CodeRabbit AI PR Reviewer",
+      "properties": {
+        "coderabbit.apiEndpoint": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "CodeRabbit API endpoint URL",
+          "order": 1
+        },
+        "coderabbit.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "CodeRabbit API key for authentication",
+          "order": 2
+        },
+        "coderabbit.enableRealTimeAnalysis": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable real-time code analysis as you type",
+          "order": 3
+        },
+        "coderabbit.analysisLanguages": {
+          "type": "array",
+          "default": ["javascript", "typescript", "python", "rust", "java", "go"],
+          "description": "Programming languages to analyze",
+          "order": 4
+        },
+        "coderabbit.analysisDepth": {
+          "type": "string",
+          "enum": ["basic", "detailed", "comprehensive"],
+          "default": "detailed",
+          "description": "Depth of analysis to perform",
+          "order": 5
+        },
+        "coderabbit.showInlineAnnotations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline code annotations and suggestions",
+          "order": 6
+        },
+        "coderabbit.maxFileSizeKB": {
+          "type": "number",
+          "default": 1024,
+          "description": "Maximum file size in KB to analyze",
+          "order": 7
+        },
+        "coderabbit.timeoutSeconds": {
+          "type": "number",
+          "default": 30,
+          "description": "Analysis timeout in seconds",
+          "order": 8
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.0.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/test-electron": "^2.2.0",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.28.0",
+    "glob": "^8.0.3",
+    "mocha": "^10.1.0",
+    "typescript": "^4.9.3"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "marked": "^9.1.6",
+    "ws": "^8.14.2"
+  }
+}

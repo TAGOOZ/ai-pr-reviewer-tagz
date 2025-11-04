@@ -1,0 +1,32 @@
+[package]
+name = "coderabbit-security"
+version = "0.1.0"
+edition = "2021"
+authors = ["CodeRabbit Team"]
+license = "MIT"
+description = "Security module for CodeRabbit AI PR Reviewer with sandboxing and compliance"
+
+[dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+async-trait = "0.1"
+
+# System dependencies
+nix = { version = "0.27", features = ["user", "fs"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Security dependencies
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+[dependencies.coderabbit-shared]
+path = "../shared"
+
+[dev-dependencies]
+tempfile = "3.0"

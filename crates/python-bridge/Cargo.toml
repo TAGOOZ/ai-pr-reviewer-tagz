@@ -1,0 +1,54 @@
+[package]
+name = "coderabbit-python-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "coderabbit_python_bridge"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Core dependencies
+coderabbit-shared = { path = "../shared" }
+coderabbit-code-analyzer = { path = "../code-analyzer" }
+coderabbit-vector-engine = { path = "../vector-engine" }
+coderabbit-orchestrator = { path = "../orchestrator" }
+
+# Python integration
+pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3-macros = "0.20"
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rmp-serde = "1.1"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Vector operations (simplified for now)
+# lancedb = { version = "0.10", features = ["serde", "arrow"] }
+# arrow-array = "52.0"
+# arrow-schema = "52.0"
+
+# Code analysis
+tree-sitter = "0.20"
+rayon = "1.8"
+
+[features]
+default = []

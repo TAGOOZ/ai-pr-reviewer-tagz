@@ -1,0 +1,48 @@
+[package]
+name = "coderabbit-code-analyzer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+coderabbit-shared = { path = "../shared" }
+coderabbit-vector-engine = { path = "../vector-engine" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Code parsing
+tree-sitter = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-java = { workspace = true }
+tree-sitter-go = { workspace = true }
+
+# Parallel processing
+rayon = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# File operations
+walkdir = "2.4"
+ignore = "0.4"
+
+# Regex for pattern matching
+regex = "1.10"
+
+# UUID and time
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
