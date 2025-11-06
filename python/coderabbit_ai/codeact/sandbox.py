@@ -115,9 +115,7 @@ class CodeSandbox:
                         "--pids-limit=50",  # Max 50 processes
                         "--security-opt=no-new-privileges",
                         "-v",
-                        f"{tmpdir}:/workspace:ro",  # Read-only mount
-                        "-v",
-                        f"{output_file}:/output.json:rw",  # Write-only output
+                        f"{tmpdir}:/workspace",  # Read-write mount for entire workspace
                         "coderabbit-sandbox:latest",
                         "python3",
                         "/workspace/analysis.py",
@@ -170,7 +168,7 @@ class CodeSandbox:
         self, code: str, allowed: Optional[List[str]] = None
     ) -> bool:
         """
-        Validate only allowed imports are used.
+        Validate only allowed imports are used using AST parsing.
 
         Args:
             code: Python code to validate
@@ -182,16 +180,24 @@ class CodeSandbox:
         if allowed is None:
             allowed = self.ALLOWED_IMPORTS
 
-        # Match: import foo, from foo import bar
-        import_pattern = r"(?:^|\n)\s*(?:import\s+(\w+)|from\s+(\w+)\s+import)"
-        imports = re.findall(import_pattern, code, re.MULTILINE)
+        try:
+            tree = __import__('ast').parse(code)
+        except SyntaxError as e:
+            logger.warning(f"Syntax error in code validation: {e}")
+            return False
 
-        for imp in imports:
-            module = imp[0] or imp[1]
-            if module not in allowed:
-                logger.warning(f"Disallowed import detected: {module}")
-                logger.warning(f"Allowed imports: {allowed}")
-                return False
+        for node in __import__('ast').walk(tree):
+            if isinstance(node, __import__('ast').Import):
+                for alias in node.names:
+                    if alias.name not in allowed:
+                        logger.warning(f"Disallowed import detected: {alias.name}")
+                        logger.warning(f"Allowed imports: {allowed}")
+                        return False
+            elif isinstance(node, __import__('ast').ImportFrom):
+                if node.module and node.module not in allowed:
+                    logger.warning(f"Disallowed import detected: {node.module}")
+                    logger.warning(f"Allowed imports: {allowed}")
+                    return False
 
         return True
 

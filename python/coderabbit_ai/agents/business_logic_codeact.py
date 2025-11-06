@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 class BusinessLogicAnalyzerCodeAct:
     """Detect business logic bugs using executable code analysis."""
 
-    def __init__(self, sandbox: CodeSandbox = None):
-        self.agent = CodeActAgent(sandbox=sandbox, max_retries=3)
+    def __init__(self, sandbox: CodeSandbox = None, max_retries: int = 3):
+        self.agent = CodeActAgent(sandbox=sandbox, max_retries=max_retries)
 
     def analyze(self, code_changes: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Analyze business logic for race conditions, edge cases, state issues."""

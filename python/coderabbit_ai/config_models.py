@@ -111,6 +111,8 @@ class SecurityConfig(BaseModel):
     """Security configuration."""
     enable_sandboxing: bool = True
     sandbox_timeout_seconds: int = Field(ge=30, le=600, default=300)
+    sandbox_max_retries: int = Field(ge=1, le=10, default=3)
+    request_timeout_seconds: int = Field(ge=5, le=300, default=60)
     allowed_file_types: Set[str] = Field(default_factory=lambda: {".py", ".js", ".ts", ".java", ".go", ".rs"})
     blocked_patterns: List[str] = Field(default_factory=list)
     enable_secret_scanning: bool = True

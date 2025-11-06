@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 class MetricsGeneratorCodeAct:
     """Generate custom code metrics dynamically."""
 
-    def __init__(self, sandbox: CodeSandbox = None):
-        self.agent = CodeActAgent(sandbox=sandbox, max_retries=3)
+    def __init__(self, sandbox: CodeSandbox = None, max_retries: int = 3):
+        self.agent = CodeActAgent(sandbox=sandbox, max_retries=max_retries)
 
     def generate_metrics(self, code_changes: str) -> Dict[str, Any]:
         """Generate complexity, coupling, and quality metrics."""

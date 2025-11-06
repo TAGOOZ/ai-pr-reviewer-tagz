@@ -596,16 +596,29 @@ class VerificationAgentPool:
         pr_description: str,
         org_config: Dict[str, Any]
     ) -> VerificationAgentResponse:
-        """Run verification for a single agent."""
-        # In a real implementation, this could be enhanced with timeout handling,
-        # error recovery, and better performance monitoring
-        return agent.forward(
-            review_response,
-            context_response,
-            code_changes,
-            pr_description,
-            org_config,
-        )
+        """Run verification for a single agent with error handling."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            return agent.forward(
+                review_response,
+                context_response,
+                code_changes,
+                pr_description,
+                org_config,
+            )
+        except Exception as e:
+            logger.error(f"Verification agent {agent.specialization} failed: {e}", exc_info=True)
+            # Return a dummy response to allow other agents to continue
+            return VerificationAgentResponse(
+                agent_id=f"verification_{agent.specialization}",
+                confidence_score=0.0,
+                processing_time_ms=0,
+                filtered_findings=f"Agent failed: {str(e)}",
+                relevance_score=0.0,
+                specialization=agent.specialization
+            )
     
     def build_consensus(self, responses: List[VerificationAgentResponse]) -> Dict[str, Any]:
         """

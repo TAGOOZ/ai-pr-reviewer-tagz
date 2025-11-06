@@ -118,10 +118,17 @@ impl SemanticSearch {
     pub async fn hybrid_search(&self, text_query: &str, code_embedding: &[f32], k: usize) -> Result<Vec<SearchResult>> {
         tracing::info!("Performing parallel hybrid search for: '{}'", text_query);
 
+        // Handle edge case when k is very small
+        if k == 0 {
+            return Ok(Vec::new());
+        }
+        
+        let half_k = if k == 1 { 1 } else { k / 2 };
+
         // Run text and vector search in parallel for 2x speedup
         let (text_result, vector_result) = tokio::join!(
-            self.search_by_text(text_query, k / 2),
-            self.search_similar_code(code_embedding, k / 2, None)
+            self.search_by_text(text_query, half_k),
+            self.search_similar_code(code_embedding, half_k, None)
         );
 
         // Handle errors from parallel execution

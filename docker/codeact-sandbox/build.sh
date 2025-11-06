@@ -3,8 +3,11 @@
 
 set -e
 
-echo "Building CodeAct Sandbox..."
-docker build -t coderabbit-sandbox:latest .
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Building CodeAct Sandbox from $SCRIPT_DIR..."
+docker build -t coderabbit-sandbox:latest "$SCRIPT_DIR"
 
 echo "Testing sandbox..."
 docker run --rm \

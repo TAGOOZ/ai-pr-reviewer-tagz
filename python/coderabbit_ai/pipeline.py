@@ -1,6 +1,7 @@
 """Main DSPy pipeline orchestrating all agents."""
 
 import dspy
+import logging
 from typing import Dict, Any, List
 from .models import (
     ReviewRequest, 
@@ -15,6 +16,8 @@ from .agents.requirements_validator_codeact import RequirementsValidatorCodeAct
 from .agents.business_logic_codeact import BusinessLogicAnalyzerCodeAct
 from .agents.metrics_codeact import MetricsGeneratorCodeAct
 from .codeact import CodeSandbox
+
+logger = logging.getLogger(__name__)
 
 
 class CodeRabbitMultiAgentPipeline(dspy.Module):
@@ -37,10 +40,15 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
         # CodeAct agents (Phase 1-3)
         use_codeact = config.get("use_codeact", True)
         if use_codeact:
-            sandbox = CodeSandbox(timeout=30, max_memory_mb=512)
-            self.req_validator_codeact = RequirementsValidatorCodeAct(sandbox)
-            self.business_logic_codeact = BusinessLogicAnalyzerCodeAct(sandbox)
-            self.metrics_codeact = MetricsGeneratorCodeAct(sandbox)
+            # Get security config for sandbox settings
+            security_config = config.get("security", {})
+            sandbox_timeout = security_config.get("sandbox_timeout_seconds", 30)
+            max_retries = security_config.get("sandbox_max_retries", 3)
+            
+            sandbox = CodeSandbox(timeout=sandbox_timeout, max_memory_mb=512)
+            self.req_validator_codeact = RequirementsValidatorCodeAct(sandbox, max_retries=max_retries)
+            self.business_logic_codeact = BusinessLogicAnalyzerCodeAct(sandbox, max_retries=max_retries)
+            self.metrics_codeact = MetricsGeneratorCodeAct(sandbox, max_retries=max_retries)
         else:
             self.req_validator_codeact = None
             self.business_logic_codeact = None
@@ -181,7 +189,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                     if result.returncode == 0 and result.stdout:
                         historical_parts.append(f"\nRecent commits to {file_change.path}:\n{result.stdout}")
                 except Exception as e:
-                    tracing.debug(f"Could not get history for {file_change.path}: {e}")
+                    logger.debug(f"Could not get history for {file_change.path}: {e}")
             
             # 2. Get similar past changes (by searching commit messages)
             try:
@@ -196,7 +204,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 if result.returncode == 0 and result.stdout:
                     historical_parts.append(f"\nSimilar past changes:\n{result.stdout}")
             except Exception as e:
-                tracing.debug(f"Could not search similar commits: {e}")
+                logger.debug(f"Could not search similar commits: {e}")
             
             # 3. Get blame information for context
             for file_change in request.pull_request.files_changed[:3]:  # Top 3 files
@@ -211,7 +219,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                         if result.returncode == 0 and result.stdout:
                             historical_parts.append(f"\nRecent authors of {file_change.path}:\n{result.stdout[:200]}")
                 except Exception as e:
-                    tracing.debug(f"Could not get blame for {file_change.path}: {e}")
+                    logger.debug(f"Could not get blame for {file_change.path}: {e}")
             
             if historical_parts:
                 return '\n'.join(historical_parts)
@@ -219,7 +227,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 return "No historical data available for this change"
                 
         except Exception as e:
-            tracing.error(f"Failed to gather historical data: {e}")
+            logger.error(f"Failed to gather historical data: {e}")
             return f"Historical data gathering failed: {str(e)}"
     
     def _run_static_analysis(self, files_changed: List[Any]) -> List[Dict[str, Any]]:
@@ -243,29 +251,42 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                         results.extend(analysis_result['issues'])
                         
                 except Exception as e:
-                    tracing.debug(f"Static analysis failed for {file_change.path}: {e}")
+                    logger.debug(f"Static analysis failed for {file_change.path}: {e}")
             
             return results
             
         except ImportError:
-            tracing.warning("Static analyzer bridge not available, skipping static analysis")
+            logger.warning("Static analyzer bridge not available, skipping static analysis")
             return []
         except Exception as e:
-            tracing.error(f"Static analysis failed: {e}")
+            logger.error(f"Static analysis failed: {e}")
             return []
     
     def _format_code_changes(self, files_changed: List[Any]) -> str:
         """Format file changes into a readable string."""
+        if not files_changed:
+            logger.warning("No files changed in the PR")
+            return "No code changes detected."
+        
+        if not isinstance(files_changed, list):
+            logger.error(f"files_changed must be a list, got {type(files_changed)}")
+            return "Invalid code changes format."
+        
         changes = []
         for file_change in files_changed:
-            changes.append(f"""
+            try:
+                changes.append(f"""
             File: {file_change.path}
             Language: {file_change.language}
             Change Type: {file_change.change_type}
             Diff:
             {file_change.diff}
             """)
-        return "\n".join(changes)
+            except AttributeError as e:
+                logger.warning(f"Malformed file_change object: {e}")
+                continue
+        
+        return "\n".join(changes) if changes else "No valid code changes found."
     
     def _format_org_config(self, config: Any) -> Dict[str, Any]:
         """Format organization configuration for agents."""
@@ -336,38 +357,55 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
         results = {}
 
         # Phase 1: Requirements Validation
-        # Extract requirements from README, REQUIREMENTS.md, or context
-        requirements_text = self._extract_requirements(request, context_response)
-        if requirements_text:
-            pr_description = request.pull_request.description if hasattr(request, 'pull_request') else ""
-            req_result = self.req_validator_codeact.validate(
-                requirements_text=requirements_text,
-                code_changes=code_changes,
-                pr_description=pr_description
-            )
-            if req_result.get('success'):
-                results['requirements'] = req_result
-                logger.info(f"Requirements validation: {req_result.get('status')}")
+        try:
+            requirements_text = self._extract_requirements(request, context_response)
+            if requirements_text and self.req_validator_codeact:
+                pr_description = request.pull_request.description if hasattr(request, 'pull_request') else ""
+                req_result = self.req_validator_codeact.validate(
+                    requirements_text=requirements_text,
+                    code_changes=code_changes,
+                    pr_description=pr_description
+                )
+                if req_result.get('success'):
+                    results['requirements'] = req_result
+                    logger.info(f"Requirements validation: {req_result.get('status')}")
+                else:
+                    logger.warning(f"Requirements validation failed: {req_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Requirements validation agent failed: {e}", exc_info=True)
+            results['requirements'] = {'error': str(e), 'success': False}
 
         # Phase 2: Business Logic Analysis
-        # Run on complex changes or when review indicates potential issues
-        complexity_score = getattr(review_response, 'complexity_score', 0.5)
-        if complexity_score > 0.6 or self._has_async_code(code_changes):
-            bl_result = self.business_logic_codeact.analyze(
-                code_changes=code_changes,
-                context={'complexity_score': complexity_score}
-            )
-            if bl_result.get('success'):
-                results['business_logic'] = bl_result
-                risk_score = bl_result.get('risk_score', 0.0)
-                logger.info(f"Business logic analysis: risk_score={risk_score}")
+        try:
+            complexity_score = getattr(review_response, 'complexity_score', 0.5)
+            if complexity_score > 0.6 or self._has_async_code(code_changes):
+                if self.business_logic_codeact:
+                    bl_result = self.business_logic_codeact.analyze(
+                        code_changes=code_changes,
+                        context={'complexity_score': complexity_score}
+                    )
+                    if bl_result.get('success'):
+                        results['business_logic'] = bl_result
+                        risk_score = bl_result.get('risk_score', 0.0)
+                        logger.info(f"Business logic analysis: risk_score={risk_score}")
+                    else:
+                        logger.warning(f"Business logic analysis failed: {bl_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Business logic analysis agent failed: {e}", exc_info=True)
+            results['business_logic'] = {'error': str(e), 'success': False}
 
         # Phase 3: Custom Metrics
-        # Always generate metrics for transparency
-        metrics_result = self.metrics_codeact.generate_metrics(code_changes)
-        if metrics_result.get('success'):
-            results['metrics'] = metrics_result
-            logger.info(f"Custom metrics: {metrics_result.get('summary', 'N/A')}")
+        try:
+            if self.metrics_codeact:
+                metrics_result = self.metrics_codeact.generate_metrics(code_changes)
+                if metrics_result.get('success'):
+                    results['metrics'] = metrics_result
+                    logger.info(f"Custom metrics: {metrics_result.get('summary', 'N/A')}")
+                else:
+                    logger.warning(f"Metrics generation failed: {metrics_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Metrics generation agent failed: {e}", exc_info=True)
+            results['metrics'] = {'error': str(e), 'success': False}
 
         return results
 
@@ -550,14 +588,16 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
 
         # Phase 1: Requirements Validation
         if 'requirements' in codeact_results:
-            req_data = codeact_results['requirements']
+            req_data = codeact_results.get('requirements', {})
             status = req_data.get('status', 'UNKNOWN')
 
             if status == 'INCOMPLETE':
                 missing = req_data.get('missing_features', [])
                 if missing:
+                    implemented_count = req_data.get('implemented_count', 0)
+                    required_count = req_data.get('required_count', 0)
                     message = f"Requirements validation: {status}\n"
-                    message += f"Implemented {req_data.get('implemented_count', 0)}/{req_data.get('required_count', 0)} features\n"
+                    message += f"Implemented {implemented_count}/{required_count} features\n"
                     message += "Missing:\n" + "\n".join(f"- {f}" for f in missing)
 
                     comments.append(ReviewComment(
@@ -572,8 +612,10 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             elif status == 'SCOPE_CREEP':
                 extra = req_data.get('extra_features', [])
                 if extra:
+                    implemented_count = req_data.get('implemented_count', 0)
+                    required_count = req_data.get('required_count', 0)
                     message = f"Requirements validation: {status}\n"
-                    message += f"Implemented {req_data.get('implemented_count', 0)} features but only {req_data.get('required_count', 0)} required\n"
+                    message += f"Implemented {implemented_count} features but only {required_count} required\n"
                     message += "Extra features:\n" + "\n".join(f"- {f}" for f in extra)
 
                     comments.append(ReviewComment(
@@ -587,7 +629,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
 
         # Phase 2: Business Logic Analysis
         if 'business_logic' in codeact_results:
-            bl_data = codeact_results['business_logic']
+            bl_data = codeact_results.get('business_logic', {})
             risk_score = bl_data.get('risk_score', 0.0)
 
             # Race conditions
@@ -625,7 +667,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
 
         # Phase 3: Custom Metrics
         if 'metrics' in codeact_results:
-            metrics_data = codeact_results['metrics']
+            metrics_data = codeact_results.get('metrics', {})
             quality_score = metrics_data.get('quality_score', 100)
 
             if quality_score < 70:
