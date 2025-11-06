@@ -437,18 +437,31 @@ impl VectorStorage {
 
     fn calculate_keyword_relevance(&self, query: &str, content: &str, keywords: &[String]) -> f32 {
         let content_lower = content.to_lowercase();
+        let query_lower = query.to_lowercase();
         let mut score = 0.0;
-        
+
+        // BOOST: Exact match of full query gets significant boost (prioritize precision)
+        if content_lower.contains(&query_lower) {
+            score += 0.5; // 50% boost for exact query match
+            tracing::debug!("Exact match boost applied for query: '{}'", query);
+        }
+
         // Query term relevance
         score += self.calculate_textual_relevance(query, content) * 0.5;
-        
+
         // Keyword relevance
         for keyword in keywords {
-            if content_lower.contains(&keyword.to_lowercase()) {
+            let keyword_lower = keyword.to_lowercase();
+            if content_lower.contains(&keyword_lower) {
                 score += 0.1;
+
+                // Extra boost for exact keyword match (not partial)
+                if content_lower.split_whitespace().any(|word| word == keyword_lower) {
+                    score += 0.05; // Extra 5% for exact word match
+                }
             }
         }
-        
+
         score.min(1.0)
     }
 

@@ -11,6 +11,10 @@ from .models import (
 )
 from .agents import ContextEngineeringAgent, ReviewAgent, VerificationAgent
 from .agents.verification_agent import VerificationAgentPool
+from .agents.requirements_validator_codeact import RequirementsValidatorCodeAct
+from .agents.business_logic_codeact import BusinessLogicAnalyzerCodeAct
+from .agents.metrics_codeact import MetricsGeneratorCodeAct
+from .codeact import CodeSandbox
 
 
 class CodeRabbitMultiAgentPipeline(dspy.Module):
@@ -29,6 +33,18 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             "security", "performance", "style", "logic", "testing", "requirements_validation"
         ])
         self.verification_pool = VerificationAgentPool(verification_specs, config)
+
+        # CodeAct agents (Phase 1-3)
+        use_codeact = config.get("use_codeact", True)
+        if use_codeact:
+            sandbox = CodeSandbox(timeout=30, max_memory_mb=512)
+            self.req_validator_codeact = RequirementsValidatorCodeAct(sandbox)
+            self.business_logic_codeact = BusinessLogicAnalyzerCodeAct(sandbox)
+            self.metrics_codeact = MetricsGeneratorCodeAct(sandbox)
+        else:
+            self.req_validator_codeact = None
+            self.business_logic_codeact = None
+            self.metrics_codeact = None
         
     def forward(self, request: ReviewRequest) -> ReviewResponse:
         """
@@ -66,12 +82,23 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             org_config,
         )
         
-        # Step 4: Build Consensus and Filter Comments
+        # Step 4: CodeAct Analysis (Phase 1-3)
+        codeact_results = {}
+        if self.req_validator_codeact:
+            codeact_results = self._run_codeact_analysis(
+                request,
+                context_response,
+                code_changes,
+                review_response
+            )
+
+        # Step 5: Build Consensus and Filter Comments
         consensus = self.verification_pool.build_consensus(verification_responses)
         final_comments = self._generate_final_comments(
-            review_response, 
-            verification_responses, 
-            consensus
+            review_response,
+            verification_responses,
+            consensus,
+            codeact_results
         )
         
         # Calculate metrics
@@ -286,14 +313,94 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
         )
 
         return verification_responses
-    
+
+    def _run_codeact_analysis(
+        self,
+        request: ReviewRequest,
+        context_response,
+        code_changes: str,
+        review_response
+    ) -> Dict[str, Any]:
+        """
+        Run CodeAct agents (Phase 1-3) for executable code analysis.
+
+        Args:
+            request: ReviewRequest with PR data
+            context_response: Context from context engineering agent
+            code_changes: Formatted code changes
+            review_response: Review agent response
+
+        Returns:
+            dict with results from Phase 1-3 agents
+        """
+        results = {}
+
+        # Phase 1: Requirements Validation
+        # Extract requirements from README, REQUIREMENTS.md, or context
+        requirements_text = self._extract_requirements(request, context_response)
+        if requirements_text:
+            pr_description = request.pull_request.description if hasattr(request, 'pull_request') else ""
+            req_result = self.req_validator_codeact.validate(
+                requirements_text=requirements_text,
+                code_changes=code_changes,
+                pr_description=pr_description
+            )
+            if req_result.get('success'):
+                results['requirements'] = req_result
+                logger.info(f"Requirements validation: {req_result.get('status')}")
+
+        # Phase 2: Business Logic Analysis
+        # Run on complex changes or when review indicates potential issues
+        complexity_score = getattr(review_response, 'complexity_score', 0.5)
+        if complexity_score > 0.6 or self._has_async_code(code_changes):
+            bl_result = self.business_logic_codeact.analyze(
+                code_changes=code_changes,
+                context={'complexity_score': complexity_score}
+            )
+            if bl_result.get('success'):
+                results['business_logic'] = bl_result
+                risk_score = bl_result.get('risk_score', 0.0)
+                logger.info(f"Business logic analysis: risk_score={risk_score}")
+
+        # Phase 3: Custom Metrics
+        # Always generate metrics for transparency
+        metrics_result = self.metrics_codeact.generate_metrics(code_changes)
+        if metrics_result.get('success'):
+            results['metrics'] = metrics_result
+            logger.info(f"Custom metrics: {metrics_result.get('summary', 'N/A')}")
+
+        return results
+
+    def _extract_requirements(self, request: ReviewRequest, context_response) -> str:
+        """Extract requirements text from PR context."""
+        requirements = ""
+
+        # Check context for README or REQUIREMENTS files
+        if hasattr(context_response, 'retrieved_context'):
+            for ctx in context_response.retrieved_context:
+                filename = ctx.get('filename', '').lower()
+                if 'readme' in filename or 'requirements' in filename or 'spec' in filename:
+                    requirements += ctx.get('content', '')
+
+        # Fallback: PR description as requirements
+        if not requirements and hasattr(request, 'pull_request'):
+            requirements = request.pull_request.description or ""
+
+        return requirements
+
+    def _has_async_code(self, code_changes: str) -> bool:
+        """Check if code changes contain async patterns."""
+        async_patterns = ['async def', 'await ', 'asyncio', 'aiohttp', 'threading', 'multiprocessing']
+        return any(pattern in code_changes for pattern in async_patterns)
+
     def _generate_final_comments(
         self,
         review_response,
         verification_responses: List[Any],
-        consensus: Dict[str, Any]
+        consensus: Dict[str, Any],
+        codeact_results: Dict[str, Any] = None
     ) -> List[ReviewComment]:
-        """Generate final filtered comments based on all agent responses."""
+        """Generate final filtered comments based on all agent responses including CodeAct."""
         final_comments = []
 
         # Extract review findings from the review agent
@@ -324,6 +431,11 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 # Parse verification findings
                 verification_comments = self._parse_verification_findings(verified_findings, consensus)
                 final_comments.extend(verification_comments)
+
+        # Add CodeAct findings (Phase 1-3)
+        if codeact_results:
+            codeact_comments = self._parse_codeact_findings(codeact_results)
+            final_comments.extend(codeact_comments)
 
         # Deduplicate comments based on file path and message similarity
         final_comments = self._deduplicate_comments(final_comments)
@@ -431,6 +543,108 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             "dependencies": "high"
         }
         return severity_map.get(specialization, "info")
+
+    def _parse_codeact_findings(self, codeact_results: Dict[str, Any]) -> List[ReviewComment]:
+        """Parse CodeAct analysis results into review comments."""
+        comments = []
+
+        # Phase 1: Requirements Validation
+        if 'requirements' in codeact_results:
+            req_data = codeact_results['requirements']
+            status = req_data.get('status', 'UNKNOWN')
+
+            if status == 'INCOMPLETE':
+                missing = req_data.get('missing_features', [])
+                if missing:
+                    message = f"Requirements validation: {status}\n"
+                    message += f"Implemented {req_data.get('implemented_count', 0)}/{req_data.get('required_count', 0)} features\n"
+                    message += "Missing:\n" + "\n".join(f"- {f}" for f in missing)
+
+                    comments.append(ReviewComment(
+                        file_path="requirements",
+                        line_number=0,
+                        message=message,
+                        severity="high",
+                        category="requirements",
+                        suggestion="Implement missing requirements before merging"
+                    ))
+
+            elif status == 'SCOPE_CREEP':
+                extra = req_data.get('extra_features', [])
+                if extra:
+                    message = f"Requirements validation: {status}\n"
+                    message += f"Implemented {req_data.get('implemented_count', 0)} features but only {req_data.get('required_count', 0)} required\n"
+                    message += "Extra features:\n" + "\n".join(f"- {f}" for f in extra)
+
+                    comments.append(ReviewComment(
+                        file_path="requirements",
+                        line_number=0,
+                        message=message,
+                        severity="medium",
+                        category="requirements",
+                        suggestion="Confirm extra features with stakeholders"
+                    ))
+
+        # Phase 2: Business Logic Analysis
+        if 'business_logic' in codeact_results:
+            bl_data = codeact_results['business_logic']
+            risk_score = bl_data.get('risk_score', 0.0)
+
+            # Race conditions
+            race_conditions = bl_data.get('race_conditions', [])
+            if race_conditions:
+                message = f"Business logic risk score: {risk_score:.2f}\n"
+                message += f"Found {len(race_conditions)} potential race condition(s):\n"
+                for rc in race_conditions[:3]:  # Limit to top 3
+                    message += f"- {rc}\n"
+
+                comments.append(ReviewComment(
+                    file_path="business_logic",
+                    line_number=0,
+                    message=message,
+                    severity="critical" if risk_score > 0.8 else "high",
+                    category="concurrency",
+                    suggestion="Add locks or use atomic operations for shared state"
+                ))
+
+            # Edge case gaps
+            edge_cases = bl_data.get('edge_case_gaps', [])
+            if edge_cases:
+                message = f"Missing edge case handling ({len(edge_cases)} issues):\n"
+                for ec in edge_cases[:3]:  # Limit to top 3
+                    message += f"- {ec}\n"
+
+                comments.append(ReviewComment(
+                    file_path="business_logic",
+                    line_number=0,
+                    message=message,
+                    severity="high" if risk_score > 0.7 else "medium",
+                    category="edge_cases",
+                    suggestion="Add None checks and input validation"
+                ))
+
+        # Phase 3: Custom Metrics
+        if 'metrics' in codeact_results:
+            metrics_data = codeact_results['metrics']
+            quality_score = metrics_data.get('quality_score', 100)
+
+            if quality_score < 70:
+                complexity = metrics_data.get('cyclomatic_complexity', 0)
+                message = f"Code quality score: {quality_score}/100\n"
+                if complexity > 15:
+                    message += f"High cyclomatic complexity: {complexity}\n"
+                message += metrics_data.get('summary', '')
+
+                comments.append(ReviewComment(
+                    file_path="metrics",
+                    line_number=0,
+                    message=message,
+                    severity="medium" if quality_score < 50 else "low",
+                    category="code_quality",
+                    suggestion="Consider refactoring complex functions"
+                ))
+
+        return comments
 
     def _deduplicate_comments(self, comments: List[ReviewComment]) -> List[ReviewComment]:
         """Remove duplicate comments based on similarity."""

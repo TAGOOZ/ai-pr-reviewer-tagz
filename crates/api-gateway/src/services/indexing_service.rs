@@ -27,14 +27,20 @@ pub struct IndexingResult {
 pub struct IndexingService {
     orchestrator: Arc<RwLock<RagOrchestrator>>,
     github_token: String,
+    static_context_cache: Option<Arc<coderabbit_cache_layer::StaticContextCache<coderabbit_cache_layer::MultiTierCache>>>,
 }
 
 impl IndexingService {
-    pub fn new(orchestrator: Arc<RwLock<RagOrchestrator>>, github_token: String) -> Self {
-        tracing::info!("Indexing service initialized");
+    pub fn new(
+        orchestrator: Arc<RwLock<RagOrchestrator>>,
+        github_token: String,
+        static_context_cache: Option<Arc<coderabbit_cache_layer::StaticContextCache<coderabbit_cache_layer::MultiTierCache>>>,
+    ) -> Self {
+        tracing::info!("Indexing service initialized with CAG support");
         Self {
             orchestrator,
             github_token,
+            static_context_cache,
         }
     }
 
@@ -60,6 +66,28 @@ impl IndexingService {
                 });
             }
         };
+
+        // Warmup static context cache (CAG layer) for faster PR reviews
+        if let Some(cache) = &self.static_context_cache {
+            tracing::info!("Warming up static context cache for {}/{}", request.owner, request.repo_name);
+            let file_contents: Vec<(String, String)> = files
+                .iter()
+                .map(|(path, content, _lang)| (path.clone(), content.clone()))
+                .collect();
+
+            match cache.warmup_repo_cache(&request.owner, &request.repo_name, file_contents).await {
+                Ok(warmup_result) => {
+                    tracing::info!(
+                        "Static context cache warmup complete: {} types cached, {} skipped",
+                        warmup_result.cached_contexts.len(),
+                        warmup_result.skipped_types.len()
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Static context cache warmup failed (non-critical): {}", e);
+                }
+            }
+        }
 
         // Index files using RAG orchestrator
         let orchestrator = self.orchestrator.read().await;

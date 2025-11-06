@@ -116,19 +116,25 @@ impl SemanticSearch {
     }
 
     pub async fn hybrid_search(&self, text_query: &str, code_embedding: &[f32], k: usize) -> Result<Vec<SearchResult>> {
-        tracing::info!("Performing hybrid search for: '{}'", text_query);
-        
-        // Combine results from both text and vector search
-        let text_results = self.search_by_text(text_query, k / 2).await?;
-        let vector_results = self.search_similar_code(code_embedding, k / 2, None).await?;
-        
+        tracing::info!("Performing parallel hybrid search for: '{}'", text_query);
+
+        // Run text and vector search in parallel for 2x speedup
+        let (text_result, vector_result) = tokio::join!(
+            self.search_by_text(text_query, k / 2),
+            self.search_similar_code(code_embedding, k / 2, None)
+        );
+
+        // Handle errors from parallel execution
+        let text_results = text_result?;
+        let vector_results = vector_result?;
+
         // Merge and re-rank results
         let combined_results = self.merge_and_rerank(text_results, vector_results, text_query);
-        
+
         Ok(combined_results)
     }
     
-    fn merge_and_rerank(&self, mut text_results: Vec<SearchResult>, mut vector_results: Vec<SearchResult>, query: &str) -> Vec<SearchResult> {
+    fn merge_and_rerank(&self, mut text_results: Vec<SearchResult>, mut vector_results: Vec<SearchResult>, _query: &str) -> Vec<SearchResult> {
         // Create a map to deduplicate results
         let mut result_map: HashMap<String, SearchResult> = HashMap::new();
         

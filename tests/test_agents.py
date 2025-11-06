@@ -140,13 +140,14 @@ def test_verification_agent_specialization_context():
 
 @pytest.mark.parametrize("specialization", [
     "security", "performance", "style", "logic", "testing",
-    "documentation", "accessibility", "maintainability", "architecture", "dependencies"
+    "documentation", "accessibility", "maintainability", "architecture", "dependencies",
+    "requirements_validation"
 ])
 def test_all_verification_specializations(specialization):
     """Test all verification agent specializations."""
     agent = VerificationAgent(specialization)
     assert agent.specialization == specialization
-    
+
     context = agent._generate_specialization_context()
     assert len(context) > 0
     assert specialization in context.lower() or specialization.replace("_", " ") in context.lower()
