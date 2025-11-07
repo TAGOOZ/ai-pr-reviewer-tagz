@@ -288,7 +288,8 @@ class HybridContextRetriever:
             for content_type, static_ctx in hybrid_context.static_context.items():
                 sections.append(f"## {content_type.value.upper().replace('_', ' ')}")
                 sections.append(f"Sources: {', '.join(static_ctx.source_files)}")
-                sections.append(f"{static_ctx.content[:1000]}...\n")  # Truncate for context window
+                from .. import config
+                sections.append(f"{static_ctx.content[:config.TRUNCATE_STATIC_CONTEXT]}...\n")
 
         # Format dynamic context
         sections.append("\n=== DYNAMIC CONTEXT (from RAG) ===\n")

@@ -17,6 +17,7 @@ import msgpack
 from .models import ReviewRequest, ReviewResponse
 from .pipeline import CodeRabbitMultiAgentPipeline
 from .embeddings import get_embedding_service
+from . import config
 
 
 # Global pipeline instance
@@ -26,7 +27,7 @@ pipeline: CodeRabbitMultiAgentPipeline = None
 # --- Result storage helpers ---
 def _get_store_dir() -> str:
     """Return the directory to store review results and ensure it exists."""
-    base = os.getenv("REVIEW_STORE_PATH", "./data/reviews")
+    base = config.REVIEW_STORE_PATH
     os.makedirs(base, exist_ok=True)
     return base
 
@@ -432,19 +433,15 @@ def main():
         format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | {message}"
     )
     
-    # Get configuration from environment
-    host = os.getenv("HOST", "127.0.0.1")
-    port = int(os.getenv("PORT", "8081"))
-    workers = int(os.getenv("WORKERS", "1"))
-    
-    logger.info(f"Starting server on {host}:{port} with {workers} workers")
-    
+    # Get configuration from config module
+    logger.info(f"Starting server on {config.SERVER_HOST}:{config.SERVER_PORT} with {config.SERVER_WORKERS} workers")
+
     # Run the server
     uvicorn.run(
         "coderabbit_ai.server:app",
-        host=host,
-        port=port,
-        workers=workers,
+        host=config.SERVER_HOST,
+        port=config.SERVER_PORT,
+        workers=config.SERVER_WORKERS,
         reload=os.getenv("ENVIRONMENT") == "development",
         log_level="info"
     )

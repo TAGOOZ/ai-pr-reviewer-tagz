@@ -88,7 +88,10 @@ class VerificationAgent(dspy.Module):
             pass
 
         # Keep code context bounded while retaining high signal
-        def _truncate(text: str, limit: int = 6000) -> str:
+        from .. import config
+        def _truncate(text: str, limit: int = None) -> str:
+            if limit is None:
+                limit = config.TRUNCATE_VERIFICATION_TEXT
             return text if len(text) <= limit else text[:limit] + "\n... [truncated]"
 
         code_context = (

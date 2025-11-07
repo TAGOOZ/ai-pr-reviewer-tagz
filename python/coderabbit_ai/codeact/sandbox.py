@@ -9,6 +9,8 @@ import textwrap
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
+from .. import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,24 +48,24 @@ class CodeSandbox:
 
     def __init__(
         self,
-        timeout: int = 30,
-        max_memory_mb: int = 512,
-        max_cpus: float = 1.0,
-        max_output_size: int = 1024 * 1024,  # 1MB
+        timeout: int = None,
+        max_memory_mb: int = None,
+        max_cpus: float = None,
+        max_output_size: int = None,
     ):
         """
         Initialize sandbox.
 
         Args:
-            timeout: Max execution time in seconds
-            max_memory_mb: Max memory usage in MB
-            max_cpus: Max CPU cores
-            max_output_size: Max output size in bytes
+            timeout: Max execution time in seconds (default from config)
+            max_memory_mb: Max memory usage in MB (default from config)
+            max_cpus: Max CPU cores (default from config)
+            max_output_size: Max output size in bytes (default from config)
         """
-        self.timeout = timeout
-        self.max_memory_mb = max_memory_mb
-        self.max_cpus = max_cpus
-        self.max_output_size = max_output_size
+        self.timeout = timeout if timeout is not None else config.SANDBOX_EXECUTION_TIMEOUT
+        self.max_memory_mb = max_memory_mb if max_memory_mb is not None else config.SANDBOX_MAX_MEMORY_MB
+        self.max_cpus = max_cpus if max_cpus is not None else config.SANDBOX_MAX_CPUS
+        self.max_output_size = max_output_size if max_output_size is not None else config.SANDBOX_MAX_OUTPUT_SIZE_BYTES
 
     def execute(
         self,
@@ -113,11 +115,11 @@ class CodeSandbox:
                         "--network=none",  # No network access
                         f"--memory={self.max_memory_mb}m",
                         f"--cpus={self.max_cpus}",
-                        "--pids-limit=50",  # Max 50 processes
+                        f"--pids-limit={config.SANDBOX_MAX_PROCESSES}",
                         "--security-opt=no-new-privileges",
                         "-v",
                         f"{tmpdir}:/workspace",  # Read-write mount for entire workspace
-                        "coderabbit-sandbox:latest",
+                        config.SANDBOX_DOCKER_IMAGE,
                         "python3",
                         "/workspace/analysis.py",
                     ],
@@ -129,7 +131,7 @@ class CodeSandbox:
                 if result.returncode != 0:
                     logger.warning(f"Sandbox execution failed: {result.stderr}")
                     return {
-                        "error": result.stderr[:1000],  # Truncate error
+                        "error": result.stderr[:config.TRUNCATE_ERROR_OUTPUT],
                         "code": code,
                         "exit_code": result.returncode,
                     }
@@ -150,7 +152,7 @@ class CodeSandbox:
                     except json.JSONDecodeError as e:
                         return {
                             "error": f"Invalid JSON output: {e}",
-                            "output": output_text[:1000],
+                            "output": output_text[:config.TRUNCATE_SANDBOX_OUTPUT],
                         }
 
                 return {"error": "No output generated"}
