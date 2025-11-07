@@ -181,19 +181,21 @@ class CodeSandbox:
             allowed = self.ALLOWED_IMPORTS
 
         try:
-            tree = __import__('ast').parse(code)
+            import ast
+            tree = ast.parse(code)
         except SyntaxError as e:
             logger.warning(f"Syntax error in code validation: {e}")
             return False
 
-        for node in __import__('ast').walk(tree):
-            if isinstance(node, __import__('ast').Import):
+        import ast
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name not in allowed:
                         logger.warning(f"Disallowed import detected: {alias.name}")
                         logger.warning(f"Allowed imports: {allowed}")
                         return False
-            elif isinstance(node, __import__('ast').ImportFrom):
+            elif isinstance(node, ast.ImportFrom):
                 if node.module and node.module not in allowed:
                     logger.warning(f"Disallowed import detected: {node.module}")
                     logger.warning(f"Allowed imports: {allowed}")
@@ -236,18 +238,18 @@ try:
     if 'result' not in locals():
         raise ValueError("Code must assign output to 'result' variable")
 
-    # Write output
-    with open('/output.json', 'w') as f:
+    # Write output to workspace
+    with open('/workspace/output.json', 'w') as f:
         json.dump(result, f, indent=2, default=str)
 
 except TimeoutError as e:
-    with open('/output.json', 'w') as f:
+    with open('/workspace/output.json', 'w') as f:
         json.dump({{
             "error": "Execution timed out",
             "timeout": {self.timeout}
         }}, f)
 except Exception as e:
-    with open('/output.json', 'w') as f:
+    with open('/workspace/output.json', 'w') as f:
         json.dump({{
             "error": str(e),
             "type": type(e).__name__,

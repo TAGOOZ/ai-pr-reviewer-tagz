@@ -200,10 +200,19 @@ impl<C: CacheLayer> StaticContextCache<C> {
                     content_type.matching_files().iter().any(|pattern| {
                         // Use proper path matching instead of substring contains
                         let pattern_lower = pattern.to_lowercase();
-                        // Check if path ends with the pattern or contains it as a complete segment
-                        path_lower.ends_with(&pattern_lower) || 
-                        path_lower.contains(&format!("/{}", pattern_lower)) ||
-                        path_lower == pattern_lower
+                        
+                        // For exact filename patterns (e.g., "SECURITY.md")
+                        if pattern_lower.contains('.') {
+                            // Match if path ends with the pattern or contains it as /pattern
+                            path_lower.ends_with(&pattern_lower) || 
+                            path_lower.contains(&format!("/{}", pattern_lower))
+                        } else {
+                            // For directory/path patterns (e.g., "docs/architecture")
+                            // Match if path contains the pattern as a complete segment
+                            path_lower.contains(&pattern_lower) &&
+                            (path_lower.starts_with(&pattern_lower) || 
+                             path_lower.contains(&format!("/{}", pattern_lower)))
+                        }
                     })
                 })
                 .map(|(p, c)| (p.clone(), c.clone()))

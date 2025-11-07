@@ -136,7 +136,10 @@ impl SemanticSearch {
         let vector_results = vector_result?;
 
         // Merge and re-rank results
-        let combined_results = self.merge_and_rerank(text_results, vector_results, text_query);
+        let mut combined_results = self.merge_and_rerank(text_results, vector_results, text_query);
+        
+        // Truncate to requested k
+        combined_results.truncate(k);
 
         Ok(combined_results)
     }
