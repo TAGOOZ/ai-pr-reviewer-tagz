@@ -177,6 +177,33 @@ class HybridContextData(BaseModel):
     context_sources: List[str] = Field(default_factory=list)  # ['graph', 'deepwiki', etc.]
 
 
+class SecurityFinding(BaseModel):
+    """Structured security finding from ast-grep or other security scanners."""
+    tool: str  # "ast-grep", "semgrep", etc.
+    rule_id: str  # e.g., "python/security/sql-injection"
+    severity: str  # critical, high, medium, low
+    category: str  # security, best-practice, performance, etc.
+    file: str  # Relative file path
+    line: int  # Line number where issue was found
+    column: Optional[int] = None  # Column number (if available)
+    message: str  # Human-readable description
+    code_snippet: Optional[str] = None  # Code that triggered the finding
+    suggestion: Optional[str] = None  # Suggested fix
+    cwe_id: Optional[str] = None  # CWE identifier (e.g., "CWE-89")
+    owasp_category: Optional[str] = None  # OWASP Top 10 category
+    confidence: float = Field(ge=0.0, le=1.0, default=0.9)  # Tool's confidence in finding
+    references: List[str] = Field(default_factory=list)  # Links to documentation
+
+
+class SecuritySummary(BaseModel):
+    """Summary of all security findings."""
+    total_findings: int = 0
+    by_severity: Dict[str, int] = Field(default_factory=dict)  # {critical: 2, high: 5, ...}
+    by_category: Dict[str, int] = Field(default_factory=dict)  # {security: 7, best-practice: 3, ...}
+    critical_files: List[str] = Field(default_factory=list)  # Files with critical issues
+    tools_used: List[str] = Field(default_factory=list)  # List of security tools run
+
+
 class ReviewRequest(BaseModel):
     """Review request model."""
     repository: Repository
@@ -199,6 +226,8 @@ class ReviewResponse(BaseModel):
     status: str
     comments: List[ReviewComment]
     metrics: ReviewMetrics
+    security_summary: Optional[SecuritySummary] = None
+    security_recommendation: Optional[Dict[str, Any]] = None  # SecurityRecommendation as dict
 
 
 class ContextData(BaseModel):
@@ -210,8 +239,12 @@ class ContextData(BaseModel):
     code_relationships: Optional[str] = None
     rag_context: Optional[RagContextData] = None
 
-    # New: Multi-layer context system
+    # Multi-layer context system
     hybrid_context: Optional[HybridContextData] = None
+
+    # Security findings (ast-grep, semgrep, etc.)
+    security_findings: List[SecurityFinding] = Field(default_factory=list)
+    security_summary: Optional[SecuritySummary] = None
 
     # Metadata
     repository_name: Optional[str] = None  # For DeepWiki ("owner/repo" format)

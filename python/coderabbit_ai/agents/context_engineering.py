@@ -52,6 +52,16 @@ class ContextEngineeringAgent(dspy.Module):
                 logger.warning(f"Failed to enrich with hybrid context: {e}")
                 hybrid_context_str = ""
 
+        # NEW: Format security findings from ast-grep and other scanners
+        security_context_str = ""
+        if context_data.security_findings:
+            try:
+                security_context_str = self._format_security_findings(context_data.security_findings)
+                logger.info(f"Formatted {len(context_data.security_findings)} security findings")
+            except Exception as e:
+                logger.warning(f"Failed to format security findings: {e}")
+                security_context_str = ""
+
         # Convert static analysis results to string format
         static_analysis_str = self._format_static_analysis(context_data.static_analysis_results)
 
@@ -76,10 +86,12 @@ class ContextEngineeringAgent(dspy.Module):
         # Calculate enhanced confidence score
         confidence = self._calculate_confidence_score(context_data, result)
 
-        # Merge hybrid context into enriched_context
+        # Merge hybrid context and security context into enriched_context
         enriched_context = result.enriched_context
         if hybrid_context_str:
-            enriched_context = f"{hybrid_context_str}\n\n{result.enriched_context}"
+            enriched_context = f"{hybrid_context_str}\n\n{enriched_context}"
+        if security_context_str:
+            enriched_context = f"{security_context_str}\n\n{enriched_context}"
 
         return ContextEngineeringResponse(
             agent_id="context_engineering",
@@ -97,11 +109,16 @@ class ContextEngineeringAgent(dspy.Module):
                 "rag_patterns_found": len(context_data.rag_context.similar_patterns) if context_data.rag_context else 0,
                 "rag_issues_found": len(context_data.rag_context.related_issues) if context_data.rag_context else 0,
                 "rag_practices_found": len(context_data.rag_context.best_practices) if context_data.rag_context else 0,
-                # NEW: Hybrid context metadata
+                # Hybrid context metadata
                 "hybrid_context_enabled": context_data.hybrid_context is not None,
                 "context_sources": context_data.hybrid_context.context_sources if context_data.hybrid_context else [],
                 "graph_risk_level": context_data.hybrid_context.graph_context.risk_level if context_data.hybrid_context else "UNKNOWN",
-                "deepwiki_available": context_data.hybrid_context.deepwiki_context.available if context_data.hybrid_context and context_data.hybrid_context.deepwiki_context else False
+                "deepwiki_available": context_data.hybrid_context.deepwiki_context.available if context_data.hybrid_context and context_data.hybrid_context.deepwiki_context else False,
+                # NEW: Security findings metadata
+                "security_findings_count": len(context_data.security_findings),
+                "critical_security_issues": sum(1 for f in context_data.security_findings if f.severity == "critical"),
+                "high_security_issues": sum(1 for f in context_data.security_findings if f.severity == "high"),
+                "security_tools_used": list(set(f.tool for f in context_data.security_findings)) if context_data.security_findings else []
             }
         )
     
@@ -141,6 +158,124 @@ class ContextEngineeringAgent(dspy.Module):
         # Add summary header
         header = f"Static Analysis Summary: {total_issues} total issues across {len(results)} tools\n"
         return header + "\n".join(formatted_results)
+
+    def _format_security_findings(self, findings: List) -> str:
+        """
+        Format security findings from ast-grep and other security scanners.
+
+        Args:
+            findings: List of SecurityFinding objects
+
+        Returns:
+            Formatted string for LLM consumption
+        """
+        if not findings:
+            return ""
+
+        # Import here to avoid circular dependency
+        from ..models import SecurityFinding
+
+        # Convert dicts to SecurityFinding objects if needed
+        finding_objects = []
+        for f in findings:
+            if isinstance(f, dict):
+                try:
+                    finding_objects.append(SecurityFinding(**f))
+                except Exception:
+                    continue
+            else:
+                finding_objects.append(f)
+
+        if not finding_objects:
+            return ""
+
+        formatted_sections = []
+        formatted_sections.append("=" * 80)
+        formatted_sections.append("🔒 SECURITY ANALYSIS")
+        formatted_sections.append("=" * 80)
+
+        # Group by severity
+        by_severity = defaultdict(list)
+        for finding in finding_objects:
+            by_severity[finding.severity].append(finding)
+
+        # Count statistics
+        total = len(finding_objects)
+        critical_count = len(by_severity.get("critical", []))
+        high_count = len(by_severity.get("high", []))
+        medium_count = len(by_severity.get("medium", []))
+        low_count = len(by_severity.get("low", []))
+
+        # Summary
+        formatted_sections.append(f"\n📊 SUMMARY: {total} security findings detected")
+        formatted_sections.append(f"   • CRITICAL: {critical_count}")
+        formatted_sections.append(f"   • HIGH: {high_count}")
+        formatted_sections.append(f"   • MEDIUM: {medium_count}")
+        formatted_sections.append(f"   • LOW: {low_count}")
+
+        # Format findings by severity (highest first)
+        for severity in ["critical", "high", "medium", "low"]:
+            items = by_severity.get(severity, [])
+            if not items:
+                continue
+
+            formatted_sections.append(f"\n{'─' * 80}")
+            formatted_sections.append(f"{severity.upper()} SEVERITY ({len(items)} findings)")
+            formatted_sections.append('─' * 80)
+
+            # Show top 10 per severity
+            for i, finding in enumerate(items[:10], 1):
+                formatted_sections.append(f"\n{i}. [{finding.tool}] {finding.rule_id}")
+                formatted_sections.append(f"   📄 File: {finding.file}:{finding.line}")
+                formatted_sections.append(f"   ⚠️  Issue: {finding.message}")
+
+                if finding.code_snippet:
+                    snippet = finding.code_snippet[:200]
+                    formatted_sections.append(f"   💻 Code: {snippet}")
+
+                if finding.suggestion:
+                    formatted_sections.append(f"   💡 Fix: {finding.suggestion}")
+
+                if finding.cwe_id:
+                    formatted_sections.append(f"   🔗 {finding.cwe_id}")
+
+                if finding.confidence < 1.0:
+                    formatted_sections.append(f"   📈 Confidence: {finding.confidence:.0%}")
+
+            if len(items) > 10:
+                formatted_sections.append(f"\n   ... and {len(items) - 10} more {severity} issues")
+
+        # Critical files section
+        critical_files = set()
+        for finding in finding_objects:
+            if finding.severity in ["critical", "high"]:
+                critical_files.add(finding.file)
+
+        if critical_files:
+            formatted_sections.append(f"\n{'─' * 80}")
+            formatted_sections.append(f"🚨 CRITICAL FILES ({len(critical_files)} files with high-risk issues)")
+            formatted_sections.append('─' * 80)
+            for file in sorted(critical_files)[:20]:  # Top 20
+                file_findings = [f for f in finding_objects if f.file == file and f.severity in ["critical", "high"]]
+                formatted_sections.append(f"   • {file} ({len(file_findings)} issues)")
+
+        # Recommendations
+        formatted_sections.append(f"\n{'─' * 80}")
+        formatted_sections.append("📋 RECOMMENDATIONS")
+        formatted_sections.append('─' * 80)
+
+        if critical_count > 0:
+            formatted_sections.append("   ❌ BLOCK MERGE: Critical security vulnerabilities must be fixed before merging")
+        elif high_count >= 3:
+            formatted_sections.append("   ⚠️  CAUTION: Multiple high-severity issues found - review and fix recommended")
+        elif high_count > 0:
+            formatted_sections.append("   ⚠️  WARNING: High-severity issues detected - consider fixing before merge")
+        else:
+            formatted_sections.append("   ✅ No critical security issues detected")
+
+        formatted_sections.append("\n" + "=" * 80)
+
+        return "\n".join(formatted_sections)
 
     def _format_rag_context(self, rag_context) -> str:
         """Format RAG context data into a readable string for DSPy."""

@@ -2,19 +2,21 @@
 
 import dspy
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from .models import (
-    ReviewRequest, 
-    ReviewResponse, 
+    ReviewRequest,
+    ReviewResponse,
     ReviewComment,
     ContextData,
-    ReviewMetrics
+    ReviewMetrics,
+    SecurityFinding
 )
 from .agents import ContextEngineeringAgent, ReviewAgent, VerificationAgent
 from .agents.verification_agent import VerificationAgentPool
 from .agents.requirements_validator_codeact import RequirementsValidatorCodeAct
 from .agents.business_logic_codeact import BusinessLogicAnalyzerCodeAct
 from .agents.metrics_codeact import MetricsGeneratorCodeAct
+from .analyzers import SecurityAggregator
 from .codeact import CodeSandbox
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,14 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             "security", "performance", "style", "logic", "testing", "requirements_validation"
         ])
         self.verification_pool = VerificationAgentPool(verification_specs, config)
+
+        # Initialize Phase 3: Security Aggregator
+        security_config = config.get("security", {})
+        self.security_aggregator = SecurityAggregator(
+            block_on_critical=security_config.get("block_on_critical", True),
+            max_high_severity=security_config.get("max_high_severity", 3),
+            confidence_threshold=security_config.get("confidence_threshold", 0.7)
+        )
 
         # CodeAct agents (Phase 1-3)
         use_codeact = config.get("use_codeact", True)
@@ -108,7 +118,42 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             consensus,
             codeact_results
         )
-        
+
+        # Step 6: Phase 3 Security Aggregation
+        security_summary = None
+        security_recommendation_dict = None
+        if hasattr(context_data, 'security_findings') and context_data.security_findings:
+            try:
+                # Aggregate security findings
+                context_metadata = getattr(context_response, 'metadata', {})
+                prioritized_findings, security_summary, security_recommendation = self.security_aggregator.aggregate(
+                    security_findings=context_data.security_findings,
+                    context_metadata=context_metadata,
+                    verification_findings=verification_responses
+                )
+
+                # Convert security findings to comments
+                security_comments = self.security_aggregator.convert_to_comments(
+                    prioritized_findings,
+                    security_recommendation
+                )
+
+                # Add security comments to final comments (prepend for visibility)
+                final_comments = security_comments + final_comments
+
+                # Convert SecurityRecommendation dataclass to dict for model
+                security_recommendation_dict = {
+                    "action": security_recommendation.action,
+                    "severity_level": security_recommendation.severity_level,
+                    "message": security_recommendation.message,
+                    "total_issues": security_recommendation.total_issues
+                }
+
+                logger.info(f"Phase 3: Aggregated {len(prioritized_findings)} security findings, "
+                           f"recommendation: {security_recommendation.action}")
+            except Exception as e:
+                logger.error(f"Phase 3 security aggregation failed: {e}", exc_info=True)
+
         # Calculate metrics
         processing_time = int((time.time() - start_time) * 1000)
 
@@ -133,7 +178,9 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             review_id=f"review_{int(time.time())}",
             status="completed",
             comments=final_comments,
-            metrics=metrics
+            metrics=metrics,
+            security_summary=security_summary,
+            security_recommendation=security_recommendation_dict
         )
     
     def _prepare_context_data(self, request: ReviewRequest) -> ContextData:
@@ -152,8 +199,13 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
         # Gather historical data from git history
         historical_data = self._gather_historical_data(request)
 
-        # Run static analysis tools
-        static_analysis_results = self._run_static_analysis(request.pull_request.files_changed)
+        # Run static analysis tools (Phase 1 + Phase 3 integration)
+        # Returns both linter results and security findings
+        project_root = getattr(request.repository, 'clone_url', '.').replace('.git', '')
+        static_analysis_results, security_findings = self._run_static_analysis(
+            request.pull_request.files_changed,
+            project_root=project_root
+        )
 
         # Extract RAG context from request if available
         rag_context = getattr(request, 'rag_context', None)
@@ -163,7 +215,8 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             code_changes=code_changes,
             historical_data=historical_data,
             static_analysis_results=static_analysis_results,
-            rag_context=rag_context
+            rag_context=rag_context,
+            security_findings=security_findings  # Phase 3: Include security findings
         )
     
     def _gather_historical_data(self, request: ReviewRequest) -> str:
@@ -230,37 +283,51 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             logger.error(f"Failed to gather historical data: {e}")
             return f"Historical data gathering failed: {str(e)}"
     
-    def _run_static_analysis(self, files_changed: List[Any]) -> List[Dict[str, Any]]:
-        """Run static analysis tools on changed files."""
+    def _run_static_analysis(self, files_changed: List[Any], project_root: str = ".") -> Tuple[List[Dict[str, Any]], List[SecurityFinding]]:
+        """
+        Run static analysis tools on changed files.
+
+        Returns:
+            Tuple of (linter_results, security_findings)
+        """
         try:
-            # Import the Rust-based static analyzer via bridge
-            # This would call the crates/code-analyzer/src/static_analysis.rs
-            from .bridge import call_static_analyzer
-            
-            results = []
-            for file_change in files_changed:
-                try:
-                    # Call the static analyzer for each file
-                    analysis_result = call_static_analyzer(
-                        file_path=file_change.path,
-                        language=file_change.language,
-                        content=getattr(file_change, 'content', '')
-                    )
-                    
-                    if analysis_result and analysis_result.get('issues'):
-                        results.extend(analysis_result['issues'])
-                        
-                except Exception as e:
-                    logger.debug(f"Static analysis failed for {file_change.path}: {e}")
-            
-            return results
-            
-        except ImportError:
-            logger.warning("Static analyzer bridge not available, skipping static analysis")
-            return []
+            # Use StaticAnalysisAggregator from Phase 1
+            from .analyzers import StaticAnalysisAggregator
+
+            # Extract file paths
+            changed_file_paths = [fc.path for fc in files_changed if hasattr(fc, 'path')]
+
+            if not changed_file_paths:
+                logger.warning("No valid file paths to analyze")
+                return ([], [])
+
+            # Initialize aggregator
+            aggregator = StaticAnalysisAggregator(
+                enable_astgrep=True,
+                enable_linters=True
+            )
+
+            # Run analysis
+            result = aggregator.analyze(
+                changed_files=changed_file_paths,
+                project_root=project_root,
+                language=None  # Auto-detect
+            )
+
+            linter_results = result.get("linter_results", [])
+            security_findings = result.get("security_findings", [])
+
+            logger.info(f"Static analysis complete: {len(linter_results)} linter results, "
+                       f"{len(security_findings)} security findings")
+
+            return (linter_results, security_findings)
+
+        except ImportError as e:
+            logger.warning(f"StaticAnalysisAggregator not available: {e}, skipping static analysis")
+            return ([], [])
         except Exception as e:
-            logger.error(f"Static analysis failed: {e}")
-            return []
+            logger.error(f"Static analysis failed: {e}", exc_info=True)
+            return ([], [])
     
     def _format_code_changes(self, files_changed: List[Any]) -> str:
         """Format file changes into a readable string."""

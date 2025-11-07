@@ -222,14 +222,25 @@ class ReviewAgent(dspy.Module):
             confidence_score=sum(confidence_scores.values()) / len(confidence_scores)
         )
         
-        # NEW: Extract hybrid context metadata if available
+        # NEW: Extract hybrid context and security metadata if available
         hybrid_metadata = {}
+        security_metadata = {}
         if hasattr(context_response, 'metadata') and context_response.metadata:
             if context_response.metadata.get('hybrid_context_enabled'):
                 hybrid_metadata = {
                     "context_sources": context_response.metadata.get('context_sources', []),
                     "graph_risk_level": context_response.metadata.get('graph_risk_level', 'UNKNOWN'),
                     "deepwiki_available": context_response.metadata.get('deepwiki_available', False),
+                }
+
+            # NEW: Extract security metadata
+            if context_response.metadata.get('security_findings_count', 0) > 0:
+                security_metadata = {
+                    "total_findings": context_response.metadata.get('security_findings_count', 0),
+                    "critical_issues": context_response.metadata.get('critical_security_issues', 0),
+                    "high_issues": context_response.metadata.get('high_security_issues', 0),
+                    "tools_used": context_response.metadata.get('security_tools_used', []),
+                    "security_risk_weight": self._calculate_security_risk_weight(context_response)
                 }
 
         return ReviewAgentResponse(
@@ -246,8 +257,10 @@ class ReviewAgent(dspy.Module):
                 "analysis_type": analysis_type,
                 "model_selection": selection_metadata,
                 "performance_metrics": self.performance_tracker.get_recent_metrics(selected_model),
-                # NEW: Hybrid context metadata
-                "hybrid_context": hybrid_metadata if hybrid_metadata else None
+                # Hybrid context metadata
+                "hybrid_context": hybrid_metadata if hybrid_metadata else None,
+                # NEW: Security metadata
+                "security": security_metadata if security_metadata else None
             }
         )
     
@@ -264,6 +277,9 @@ class ReviewAgent(dspy.Module):
             if graph_risk:
                 from ..integrations.context_adapter import ContextAdapter
                 graph_complexity = ContextAdapter.get_risk_level_weight(graph_risk) * 0.3
+
+        # NEW: Factor in security risk from ast-grep findings
+        security_risk = self._calculate_security_risk_weight(context_response)
 
         # Structural complexity
         structural_keywords = ['class', 'function', 'async', 'lambda', 'decorator']
@@ -295,18 +311,19 @@ class ReviewAgent(dspy.Module):
                 risk_level = 0.3
 
         # Weighted combination
-        if graph_complexity > 0:
-            # With graph context: rebalance weights to include graph complexity
+        if graph_complexity > 0 or security_risk > 0:
+            # With graph and/or security context: rebalance weights
             complexity_score = (
-                size_complexity * 0.15 +
-                structural_complexity * 0.25 +
-                logic_complexity * 0.25 +
-                context_complexity * 0.10 +
-                risk_level * 0.05 +
-                graph_complexity * 0.20  # NEW: Graph-based risk has significant weight
+                size_complexity * 0.10 +           # Reduced from 0.15/0.2
+                structural_complexity * 0.20 +     # Reduced from 0.25/0.3
+                logic_complexity * 0.20 +          # Reduced from 0.25/0.3
+                context_complexity * 0.10 +        # Same
+                risk_level * 0.05 +                # Same
+                graph_complexity * 0.20 +          # Graph-based risk (20%)
+                security_risk * 0.15               # NEW: Security risk (15%)
             )
         else:
-            # Without graph context: use original weights
+            # Without graph or security context: use original weights
             complexity_score = (
                 size_complexity * 0.2 +
                 structural_complexity * 0.3 +
@@ -316,7 +333,50 @@ class ReviewAgent(dspy.Module):
             )
 
         return min(1.0, complexity_score)
-    
+
+    def _calculate_security_risk_weight(self, context_response: ContextEngineeringResponse) -> float:
+        """
+        Calculate security risk weight from security findings (ast-grep, etc.).
+
+        Args:
+            context_response: Context engineering response with security metadata
+
+        Returns:
+            Security risk weight (0.0 to 1.0)
+        """
+        if not hasattr(context_response, 'metadata') or not context_response.metadata:
+            return 0.0
+
+        critical_issues = context_response.metadata.get('critical_security_issues', 0)
+        high_issues = context_response.metadata.get('high_security_issues', 0)
+        total_findings = context_response.metadata.get('security_findings_count', 0)
+
+        if total_findings == 0:
+            return 0.0
+
+        # Weight calculation based on severity
+        if critical_issues > 0:
+            # Any critical issue = maximum risk
+            return 1.0
+        elif high_issues >= 5:
+            # Many high-severity issues = very high risk
+            return 0.9
+        elif high_issues >= 3:
+            # Multiple high-severity issues = high risk
+            return 0.7
+        elif high_issues >= 1:
+            # Some high-severity issues = medium-high risk
+            return 0.5
+        elif total_findings >= 10:
+            # Many medium/low issues = medium risk
+            return 0.4
+        elif total_findings >= 5:
+            # Several medium/low issues = low-medium risk
+            return 0.3
+        else:
+            # Few medium/low issues = low risk
+            return 0.2
+
     def _detect_primary_language(self, code_changes: str) -> str:
         """Detect the primary programming language from code changes."""
         language_indicators = {

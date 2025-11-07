@@ -197,6 +197,31 @@ GRAPH_RISK_THRESHOLD_HIGH = get_env_float("GRAPH_RISK_THRESHOLD_HIGH", 0.30)
 
 
 # ============================================================================
+# AST-Grep Security Scanner Configuration
+# ============================================================================
+
+# Enable/disable ast-grep scanner
+ASTGREP_ENABLED = get_env_str("ASTGREP_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# Rules repository configuration
+ASTGREP_RULES_REPO = get_env_str("ASTGREP_RULES_REPO", "coderabbitai/ast-grep-essentials")
+ASTGREP_RULES_PATH = get_env_str("ASTGREP_RULES_PATH", "/tmp/ast-grep-rules")
+
+# Rule caching configuration
+ASTGREP_CACHE_TTL = get_env_int("ASTGREP_CACHE_TTL", 86400)  # 24 hours
+ASTGREP_AUTO_UPDATE = get_env_str("ASTGREP_AUTO_UPDATE", "true").lower() in ("true", "1", "yes")
+
+# Scanning configuration
+ASTGREP_SCAN_TIMEOUT = get_env_int("ASTGREP_SCAN_TIMEOUT", 30)  # Per-file timeout in seconds
+ASTGREP_MAX_FINDINGS_PER_FILE = get_env_int("ASTGREP_MAX_FINDINGS_PER_FILE", 50)
+
+# Security thresholds
+SECURITY_BLOCK_ON_CRITICAL = get_env_str("SECURITY_BLOCK_ON_CRITICAL", "true").lower() in ("true", "1", "yes")
+SECURITY_MAX_HIGH_SEVERITY = get_env_int("SECURITY_MAX_HIGH_SEVERITY", 3)
+SECURITY_CONFIDENCE_THRESHOLD = get_env_float("SECURITY_CONFIDENCE_THRESHOLD", 0.7)
+
+
+# ============================================================================
 # HTTP Status Codes (for reference)
 # ============================================================================
 
@@ -293,5 +318,19 @@ def get_config_dict() -> dict:
                 "medium": GRAPH_RISK_THRESHOLD_MEDIUM,
                 "high": GRAPH_RISK_THRESHOLD_HIGH,
             },
+        },
+        "astgrep": {
+            "enabled": ASTGREP_ENABLED,
+            "rules_repo": ASTGREP_RULES_REPO,
+            "rules_path": ASTGREP_RULES_PATH,
+            "cache_ttl": ASTGREP_CACHE_TTL,
+            "auto_update": ASTGREP_AUTO_UPDATE,
+            "scan_timeout": ASTGREP_SCAN_TIMEOUT,
+            "max_findings_per_file": ASTGREP_MAX_FINDINGS_PER_FILE,
+        },
+        "security": {
+            "block_on_critical": SECURITY_BLOCK_ON_CRITICAL,
+            "max_high_severity": SECURITY_MAX_HIGH_SEVERITY,
+            "confidence_threshold": SECURITY_CONFIDENCE_THRESHOLD,
         },
     }
