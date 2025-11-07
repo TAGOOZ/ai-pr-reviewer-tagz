@@ -22,10 +22,16 @@ def configure_dspy():
         dspy.settings.configure(lm=lm)
         print("\n✓ DSPy configured with OpenAI GPT-3.5-turbo")
     elif anthropic_key:
-        # Use Claude Haiku (fast and cheap)
-        lm = dspy.Claude(model="claude-3-haiku-20240307", api_key=anthropic_key)
-        dspy.settings.configure(lm=lm)
-        print("\n✓ DSPy configured with Claude Haiku")
+        # Use Anthropic Claude (DSPy uses 'Anthropic' class, not 'Claude')
+        try:
+            lm = dspy.Anthropic(model="claude-3-haiku-20240307", api_key=anthropic_key)
+            dspy.settings.configure(lm=lm)
+            print("\n✓ DSPy configured with Claude Haiku")
+        except AttributeError:
+            # Fallback: DSPy might not have Anthropic built-in
+            pytest.skip(
+                "DSPy Anthropic support not available. Set OPENAI_API_KEY instead."
+            )
     else:
         pytest.skip(
             "No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY to run CodeAct tests."
