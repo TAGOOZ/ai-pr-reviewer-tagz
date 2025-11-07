@@ -238,9 +238,9 @@ try:
     if 'result' not in locals():
         raise ValueError("Code must assign output to 'result' variable")
 
-    # Write output to workspace
+    # Write output to workspace (wrapped in 'result' key for consistency)
     with open('/workspace/output.json', 'w') as f:
-        json.dump(result, f, indent=2, default=str)
+        json.dump({{'result': result}}, f, indent=2, default=str)
 
 except TimeoutError as e:
     with open('/workspace/output.json', 'w') as f:
