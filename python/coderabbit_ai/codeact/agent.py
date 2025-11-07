@@ -108,13 +108,21 @@ class CodeActAgent(dspy.Module):
             logger.info(f"Generated code: {generated.explanation}")
             logger.debug(f"Code:\n{generated.python_code}")
 
+            # Strip markdown formatting if present
+            clean_code = self._strip_markdown(generated.python_code)
+
+            # Prepare context for sandbox
+            sandbox_context = {
+                "code_changes": code_changes,
+                **context,
+            }
+            logger.debug(f"Sandbox context keys: {list(sandbox_context.keys())}")
+            logger.debug(f"code_changes length: {len(code_changes)}")
+
             # Execute code
             exec_result = self.sandbox.execute(
-                code=generated.python_code,
-                context={
-                    "code_changes": code_changes,
-                    **context,
-                },
+                code=clean_code,
+                context=sandbox_context,
             )
 
             # Success?
@@ -123,7 +131,7 @@ class CodeActAgent(dspy.Module):
                 return {
                     "success": True,
                     "result": exec_result.get("result", exec_result),
-                    "code": generated.python_code,
+                    "code": clean_code,
                     "explanation": generated.explanation,
                     "attempts": attempt + 1,
                 }
@@ -170,3 +178,31 @@ class CodeActAgent(dspy.Module):
             formatted.append(f"SAST Findings: {sast_count} issues detected")
 
         return "\n\n".join(formatted) if formatted else "No additional context"
+
+    def _strip_markdown(self, code: str) -> str:
+        """
+        Strip markdown code block formatting from generated code.
+
+        LLMs often return code wrapped in ```python ... ```.
+        This method extracts the actual code.
+
+        Args:
+            code: Raw code from LLM (may have markdown)
+
+        Returns:
+            Clean Python code
+        """
+        code = code.strip()
+
+        # Remove markdown code blocks (```python or ``` at start/end)
+        if code.startswith("```"):
+            lines = code.split("\n")
+            # Remove first line if it's ```python or just ```
+            if lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            # Remove last line if it's ```
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            code = "\n".join(lines)
+
+        return code.strip()

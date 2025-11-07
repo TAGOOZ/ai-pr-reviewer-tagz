@@ -18,28 +18,35 @@ class MetricsGeneratorCodeAct:
         """Generate complexity, coupling, and quality metrics."""
 
         task = """
-Calculate code metrics:
+IMPORTANT: Get code from context['code_changes'], do NOT hard-code it!
 
-1. Cyclomatic complexity (avg and max)
-2. Function count
-3. Call graph depth
-4. Coupling (edges/nodes in call graph)
-5. Lines of code
-6. Quality score (0-100 based on above)
+Use the provided helper functions to calculate code quality metrics.
 
-Return:
-{
+**CRITICAL**: Extract the code to analyze from the context dictionary:
+```python
+code_to_analyze = context.get('code_changes', '')
+```
+
+Then use these helper functions:
+- count_functions(code_to_analyze)
+- calculate_cyclomatic_complexity(code_to_analyze)
+- count_lines_of_code(code_to_analyze)
+
+Create the result dict with this exact structure:
+```python
+result = {
     'metrics': {
-        'function_count': int,
-        'avg_cyclomatic_complexity': float,
-        'max_cyclomatic_complexity': int,
-        'call_graph_depth': int,
-        'coupling': float,
-        'lines_of_code': int
+        'function_count': <use count_functions()>,
+        'avg_cyclomatic_complexity': <calculate average>,
+        'max_cyclomatic_complexity': <calculate max>,
+        'call_graph_depth': 0,
+        'coupling': 0.0,
+        'lines_of_code': <use count_lines_of_code()>
     },
-    'quality_score': int (0-100),
-    'recommendation': 'GOOD' | 'REFACTOR' | 'CRITICAL'
+    'quality_score': <calculate 0-100>,
+    'recommendation': <'GOOD' or 'REFACTOR' or 'CRITICAL'>
 }
+```
 """
 
         result = self.agent.forward(
@@ -51,4 +58,23 @@ Return:
         if not result['success']:
             return {'success': False, 'error': result.get('error')}
 
-        return {'success': True, **result['result']}
+        # Ensure result has the expected structure with defaults
+        analysis = result.get('result') or {}
+
+        # Add defaults for missing fields
+        if not isinstance(analysis, dict):
+            analysis = {}
+
+        return {
+            'success': True,
+            'metrics': analysis.get('metrics', {
+                'function_count': 0,
+                'avg_cyclomatic_complexity': 0.0,
+                'max_cyclomatic_complexity': 0,
+                'call_graph_depth': 0,
+                'coupling': 0.0,
+                'lines_of_code': 0
+            }),
+            'quality_score': analysis.get('quality_score', 50),
+            'recommendation': analysis.get('recommendation', 'UNKNOWN')
+        }

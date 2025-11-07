@@ -41,6 +41,7 @@ class CodeSandbox:
         "statistics",
         "datetime",
         "typing",
+        "asyncio",
     ]
 
     def __init__(
@@ -213,11 +214,26 @@ class CodeSandbox:
         Returns:
             Wrapped code with safety measures
         """
+        # Read helper functions
+        helpers_path = Path(__file__).parent / "helpers.py"
+        helpers_code = ""
+        if helpers_path.exists():
+            with open(helpers_path, 'r') as f:
+                helpers_code = f.read()
+                # Remove module docstring and imports to extract just the functions
+                helpers_code = re.sub(r'^""".*?"""', '', helpers_code, flags=re.DOTALL)
+                helpers_code = re.sub(r'^import .*$', '', helpers_code, flags=re.MULTILINE)
+                helpers_code = re.sub(r'^from .*$', '', helpers_code, flags=re.MULTILINE)
+
         return f"""#!/usr/bin/env python3
 import json
 import sys
 import signal
 import traceback
+import ast
+import re
+import textwrap
+from typing import List, Dict, Any
 
 # Timeout handler
 def timeout_handler(signum, frame):
@@ -225,6 +241,9 @@ def timeout_handler(signum, frame):
 
 signal.signal(signal.SIGALRM, timeout_handler)
 signal.alarm({self.timeout})
+
+# Helper functions available to user code
+{helpers_code}
 
 try:
     # Load context

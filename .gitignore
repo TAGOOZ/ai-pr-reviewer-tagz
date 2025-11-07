@@ -324,3 +324,5 @@ benchmark_results/
 # Test outputs
 test_outputs/
 poetry.lock
+package-lock.json
+package.json

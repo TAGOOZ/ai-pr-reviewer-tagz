@@ -69,27 +69,56 @@ class RequirementsValidatorCodeAct:
                 - scope_alignment: "EXACT" | "MISSING" | "EXTRA"
         """
         task = """
-Analyze requirements vs implementation to detect feature count mismatches.
+Match requirements against code implementations using helper functions.
 
-Your code should:
-1. Parse requirements from requirements_text (look for numbered lists, bullet points, "must have" statements)
-2. Extract implemented features from code_changes (new functions, classes, endpoints)
-3. Compare and return:
-   - required_count: Total requirements found
-   - implemented_count: Total features implemented
-   - missing_features: List of requirements not implemented
-   - extra_features: List of features not in requirements
-   - status: "COMPLETE" if all requirements met, "INCOMPLETE" if missing, "SCOPE_CREEP" if extra
-   - scope_alignment: "EXACT" if counts match, "MISSING" if under, "EXTRA" if over
+AVAILABLE HELPERS (already imported):
+- extract_requirements_list(text) -> List[str]
+- extract_function_names(code) -> List[str]
+- keyword_match(requirement, func_name) -> bool
 
-Example output:
+Write Python code that:
+1. Gets requirements and code from context dict
+2. Calls the helper functions to extract requirements and function names
+3. Loops through requirements and matches them to functions using keyword_match()
+4. Builds result dict with counts, missing features, status
+
+Example structure:
+requirements_text = context.get('requirements', '')
+code_text = context.get('code_changes', '')
+
+requirements = extract_requirements_list(requirements_text)
+functions = extract_function_names(code_text)
+
+debug_matches = []
+implemented = []
+missing = []
+for req in requirements:
+    found = False
+    for func in functions:
+        matches = keyword_match(req, func)
+        debug_matches.append({'req': req, 'func': func, 'matched': matches})
+        if matches:
+            implemented.append(req)
+            found = True
+            break
+    if not found:
+        missing.append(req)
+
 result = {
-    'required_count': 4,
-    'implemented_count': 3,
-    'missing_features': ['session management'],
+    'required_count': len(requirements),
+    'implemented_count': len(implemented),
+    'missing_features': missing,
     'extra_features': [],
-    'status': 'INCOMPLETE',
-    'scope_alignment': 'MISSING'
+    'status': 'COMPLETE' if len(implemented) == len(requirements) else 'INCOMPLETE',
+    'scope_alignment': 'EXACT' if len(implemented) == len(requirements) else 'MISSING',
+    'debug_data': {
+        'requirements_text_len': len(requirements_text),
+        'code_text_len': len(code_text),
+        'code_text_preview': code_text[:200],  # First 200 chars
+        'requirements_found': requirements,
+        'functions_found': functions,
+        'matches': debug_matches[:20]  # Limit matches to first 20
+    }
 }
 """
 
@@ -111,9 +140,22 @@ result = {
                 "fallback": True,
             }
 
+        # Ensure result has the expected structure with defaults
+        analysis = result.get('result') or {}
+        logger.info(f"Raw analysis result: {analysis}")
+
+        # Add defaults for missing fields
+        if not isinstance(analysis, dict):
+            analysis = {}
+
         return {
             "success": True,
-            **result["result"],
+            "required_count": analysis.get("required_count", 0),
+            "implemented_count": analysis.get("implemented_count", 0),
+            "missing_features": analysis.get("missing_features", []),
+            "extra_features": analysis.get("extra_features", []),
+            "status": analysis.get("status", "UNKNOWN"),
+            "scope_alignment": analysis.get("scope_alignment", "UNKNOWN"),
             "code": result.get("code"),
             "explanation": result.get("explanation"),
             "attempts": result.get("attempts"),

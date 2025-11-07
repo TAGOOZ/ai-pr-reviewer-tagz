@@ -18,20 +18,19 @@ def configure_dspy():
 
     if openai_key:
         # Use OpenAI GPT-3.5-turbo (fast and cheap for tests)
-        lm = dspy.OpenAI(model="gpt-3.5-turbo", api_key=openai_key, max_tokens=1000)
+        lm = dspy.LM(model="openai/gpt-3.5-turbo", api_key=openai_key, max_tokens=4000)
         dspy.settings.configure(lm=lm)
         print("\n✓ DSPy configured with OpenAI GPT-3.5-turbo")
     elif anthropic_key:
-        # Use Anthropic Claude (DSPy uses 'Anthropic' class, not 'Claude')
-        try:
-            lm = dspy.Anthropic(model="claude-3-haiku-20240307", api_key=anthropic_key)
-            dspy.settings.configure(lm=lm)
-            print("\n✓ DSPy configured with Claude Haiku")
-        except AttributeError:
-            # Fallback: DSPy might not have Anthropic built-in
-            pytest.skip(
-                "DSPy Anthropic support not available. Set OPENAI_API_KEY instead."
-            )
+        # Use Anthropic Claude via LiteLLM (DSPy uses dspy.LM with LiteLLM format)
+        # Using Sonnet 4.5 with extended thinking for best CoT and structured output
+        lm = dspy.LM(
+            model="anthropic/claude-sonnet-4-5-20250929",
+            api_key=anthropic_key,
+            max_tokens=4000
+        )
+        dspy.settings.configure(lm=lm)
+        print("\n✓ DSPy configured with Claude Sonnet 4.5")
     else:
         pytest.skip(
             "No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY to run CodeAct tests."
