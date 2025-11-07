@@ -91,9 +91,10 @@ class CodeActAgent(dspy.Module):
 
             # Generate code
             try:
+                from .. import config
                 generated = self.generator(
                     task_description=task,
-                    code_changes=code_changes[:5000],  # Truncate to avoid token limits
+                    code_changes=code_changes[:config.TRUNCATE_CODE_CHANGES],
                     available_context=self._format_context(context),
                     previous_error=previous_error,
                 )

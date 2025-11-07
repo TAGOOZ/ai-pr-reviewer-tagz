@@ -5,6 +5,8 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 
+from . import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +37,7 @@ def call_static_analyzer(file_path: str, language: str, content: str) -> Optiona
             input=json.dumps(input_data),
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=config.STATIC_ANALYZER_TIMEOUT
         )
         
         if result.returncode == 0 and result.stdout:
@@ -66,16 +68,16 @@ def call_embedding_service(text: str) -> Optional[List[float]]:
         List of embedding values or None if generation fails
     """
     try:
-        # Call the embedding service (assuming it's running on localhost:8081)
+        # Call the embedding service
         import requests
-        
+
         response = requests.post(
-            'http://localhost:8081/embed',
+            config.EMBEDDING_SERVICE_URL,
             json={'text': text},
-            timeout=10
+            timeout=config.HTTP_REQUEST_TIMEOUT
         )
-        
-        if response.status_code == 200:
+
+        if response.status_code == config.HTTP_STATUS_OK:
             return response.json().get('embedding')
         else:
             logger.warning(f"Embedding service returned status {response.status_code}")
@@ -89,30 +91,36 @@ def call_embedding_service(text: str) -> Optional[List[float]]:
         return None
 
 
-def call_vector_search(query_embedding: List[float], top_k: int = 5) -> Optional[List[Dict[str, Any]]]:
+def call_vector_search(
+    query_embedding: List[float],
+    top_k: int = None
+) -> Optional[List[Dict[str, Any]]]:
     """
     Call the vector search engine to find similar code.
-    
+
     Args:
         query_embedding: Query embedding vector
-        top_k: Number of results to return
-        
+        top_k: Number of results to return (default from config)
+
     Returns:
         List of similar code snippets or None if search fails
     """
+    if top_k is None:
+        top_k = config.DEFAULT_TOP_K_RESULTS
+
     try:
         import requests
-        
+
         response = requests.post(
-            'http://localhost:8082/search',
+            config.VECTOR_SEARCH_SERVICE_URL,
             json={
                 'embedding': query_embedding,
                 'top_k': top_k
             },
-            timeout=10
+            timeout=config.HTTP_REQUEST_TIMEOUT
         )
-        
-        if response.status_code == 200:
+
+        if response.status_code == config.HTTP_STATUS_OK:
             return response.json().get('results', [])
         else:
             logger.warning(f"Vector search returned status {response.status_code}")
