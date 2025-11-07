@@ -147,6 +147,36 @@ class RagContextData(BaseModel):
     best_practices: List[BestPractice] = Field(default_factory=list)
 
 
+class GraphContextData(BaseModel):
+    """Graph-based dependency analysis context."""
+    risk_level: str  # LOW, MEDIUM, HIGH, CRITICAL
+    impact_score: float = Field(ge=0.0, le=1.0)
+    affected_files_count: int
+    directly_affected: List[str] = Field(default_factory=list)
+    transitively_affected: List[str] = Field(default_factory=list)
+    critical_files: List[Dict[str, Any]] = Field(default_factory=list)
+    component_breakdown: Dict[str, int] = Field(default_factory=dict)
+    recommendations: List[str] = Field(default_factory=list)
+    dependency_info: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+
+class DeepWikiContextData(BaseModel):
+    """DeepWiki semantic documentation context."""
+    repo: str
+    architectural_overview: Optional[str] = None
+    component_relationships: Dict[str, Any] = Field(default_factory=dict)
+    relevant_documentation: List[str] = Field(default_factory=list)
+    patterns_and_conventions: List[str] = Field(default_factory=list)
+    available: bool = False  # Whether DeepWiki was available for this repo
+
+
+class HybridContextData(BaseModel):
+    """Combined multi-layer context (Graph + DeepWiki + On-demand)."""
+    graph_context: GraphContextData
+    deepwiki_context: Optional[DeepWikiContextData] = None
+    context_sources: List[str] = Field(default_factory=list)  # ['graph', 'deepwiki', etc.]
+
+
 class ReviewRequest(BaseModel):
     """Review request model."""
     repository: Repository
@@ -179,6 +209,13 @@ class ContextData(BaseModel):
     static_analysis_results: List[Dict[str, Any]]
     code_relationships: Optional[str] = None
     rag_context: Optional[RagContextData] = None
+
+    # New: Multi-layer context system
+    hybrid_context: Optional[HybridContextData] = None
+
+    # Metadata
+    repository_name: Optional[str] = None  # For DeepWiki ("owner/repo" format)
+    project_root: Optional[str] = None  # For graph building
 
 
 class AgentResponse(BaseModel):

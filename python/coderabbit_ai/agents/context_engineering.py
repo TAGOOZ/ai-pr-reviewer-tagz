@@ -4,21 +4,31 @@ import dspy
 import ast
 import hashlib
 import time
+import logging
 from typing import Dict, Any, List, Optional, Tuple
 from ..models import ContextData, ContextEngineeringResponse, ContextEngineeringSignature
 from collections import defaultdict, Counter
 import re
 import json
 
+# Import new integration components
+from ..integrations.hybrid_context_provider import HybridContextProvider
+from ..integrations.context_adapter import ContextAdapter
+
+logger = logging.getLogger(__name__)
+
 
 class ContextEngineeringAgent(dspy.Module):
     """Enhanced Agent for gathering and enriching context for code review."""
-    
+
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__()
         self.config = config or {}
         self.context_generator = dspy.ChainOfThought(ContextEngineeringSignature)
         self.language_patterns = self._load_language_patterns()
+
+        # New: Hybrid context provider for multi-layer analysis
+        self.hybrid_provider = None  # Initialized on-demand per repository
         
     def forward(self, context_data: ContextData) -> ContextEngineeringResponse:
         """
@@ -31,6 +41,16 @@ class ContextEngineeringAgent(dspy.Module):
             ContextEngineeringResponse with enriched context and relationships
         """
         start_time = time.time()
+
+        # NEW: Enrich with hybrid context (Graph + DeepWiki) if available
+        hybrid_context_str = ""
+        if context_data.project_root:
+            try:
+                hybrid_context_str = self._enrich_with_hybrid_context(context_data)
+                logger.info("Successfully enriched context with graph and DeepWiki analysis")
+            except Exception as e:
+                logger.warning(f"Failed to enrich with hybrid context: {e}")
+                hybrid_context_str = ""
 
         # Convert static analysis results to string format
         static_analysis_str = self._format_static_analysis(context_data.static_analysis_results)
@@ -53,11 +73,19 @@ class ContextEngineeringAgent(dspy.Module):
 
         processing_time = int((time.time() - start_time) * 1000)
 
+        # Calculate enhanced confidence score
+        confidence = self._calculate_confidence_score(context_data, result)
+
+        # Merge hybrid context into enriched_context
+        enriched_context = result.enriched_context
+        if hybrid_context_str:
+            enriched_context = f"{hybrid_context_str}\n\n{result.enriched_context}"
+
         return ContextEngineeringResponse(
             agent_id="context_engineering",
-            confidence_score=self._calculate_confidence_score(context_data, result),
+            confidence_score=confidence,
             processing_time_ms=processing_time,
-            enriched_context=result.enriched_context,
+            enriched_context=enriched_context,
             code_relationships=result.code_relationships,
             relevant_patterns=result.relevant_patterns,
             metadata={
@@ -68,7 +96,12 @@ class ContextEngineeringAgent(dspy.Module):
                 "rag_enabled": context_data.rag_context is not None,
                 "rag_patterns_found": len(context_data.rag_context.similar_patterns) if context_data.rag_context else 0,
                 "rag_issues_found": len(context_data.rag_context.related_issues) if context_data.rag_context else 0,
-                "rag_practices_found": len(context_data.rag_context.best_practices) if context_data.rag_context else 0
+                "rag_practices_found": len(context_data.rag_context.best_practices) if context_data.rag_context else 0,
+                # NEW: Hybrid context metadata
+                "hybrid_context_enabled": context_data.hybrid_context is not None,
+                "context_sources": context_data.hybrid_context.context_sources if context_data.hybrid_context else [],
+                "graph_risk_level": context_data.hybrid_context.graph_context.risk_level if context_data.hybrid_context else "UNKNOWN",
+                "deepwiki_available": context_data.hybrid_context.deepwiki_context.available if context_data.hybrid_context and context_data.hybrid_context.deepwiki_context else False
             }
         )
     
@@ -268,7 +301,7 @@ class ContextEngineeringAgent(dspy.Module):
     def _calculate_confidence_score(self, context_data: ContextData, result) -> float:
         """Calculate confidence score based on input quality and completeness."""
         score = 0.7  # Base score
-        
+
         # Boost score based on available data
         if context_data.static_analysis_results:
             score += 0.1
@@ -278,7 +311,23 @@ class ContextEngineeringAgent(dspy.Module):
             score += 0.1
         if context_data.repo_structure and len(context_data.repo_structure) > 200:
             score += 0.05
-        
+
+        # NEW: Boost score based on hybrid context availability
+        if context_data.hybrid_context:
+            # Base boost for having graph context
+            score += 0.05
+
+            # Additional boost if DeepWiki is available
+            if (context_data.hybrid_context.deepwiki_context and
+                context_data.hybrid_context.deepwiki_context.available):
+                score += 0.10
+
+                # Extra boost for rich DeepWiki content
+                if context_data.hybrid_context.deepwiki_context.architectural_overview:
+                    score += 0.03
+                if context_data.hybrid_context.deepwiki_context.patterns_and_conventions:
+                    score += 0.02
+
         # Ensure score stays within bounds
         return min(1.0, score)
     
@@ -366,3 +415,98 @@ class ContextEngineeringAgent(dspy.Module):
                     pass
         
         return metrics
+
+    def _enrich_with_hybrid_context(self, context_data: ContextData) -> str:
+        """
+        Enrich context with graph-based and DeepWiki analysis.
+
+        Args:
+            context_data: Context data with project_root and optional repository_name
+
+        Returns:
+            Formatted hybrid context string for LLM
+        """
+        # Extract changed files from code_changes
+        changed_files = self._extract_changed_files(context_data.code_changes)
+
+        if not changed_files:
+            logger.warning("No changed files detected, skipping hybrid context")
+            return ""
+
+        # Initialize or reuse hybrid provider
+        if not self.hybrid_provider or self.hybrid_provider.project_root != context_data.project_root:
+            from .. import config
+
+            self.hybrid_provider = HybridContextProvider(
+                project_root=context_data.project_root,
+                repo_name=context_data.repository_name,
+                enable_deepwiki=config.DEEPWIKI_ENABLED,
+                cache_ttl=config.GRAPH_CACHE_TTL
+            )
+            logger.info(
+                f"Initialized HybridContextProvider for {context_data.project_root}"
+            )
+
+        # Get hybrid context
+        hybrid_context = self.hybrid_provider.enrich_pr_context(
+            changed_files=changed_files
+        )
+
+        # Convert to Pydantic model and store in context_data
+        hybrid_context_data = ContextAdapter.hybrid_to_hybrid_context_data(
+            hybrid_context
+        )
+        context_data.hybrid_context = hybrid_context_data
+
+        # Format for LLM
+        formatted = ContextAdapter.format_hybrid_context_for_llm(hybrid_context_data)
+
+        logger.info(
+            f"Hybrid context enriched - Sources: {hybrid_context.get_context_sources()}, "
+            f"Risk: {hybrid_context_data.graph_context.risk_level}"
+        )
+
+        return formatted
+
+    def _extract_changed_files(self, code_changes: str) -> List[str]:
+        """
+        Extract list of changed files from code_changes string.
+
+        Args:
+            code_changes: Diff or code changes string
+
+        Returns:
+            List of file paths
+        """
+        changed_files = []
+
+        # Try to parse diff format
+        lines = code_changes.split('\n')
+        for line in lines:
+            # Match diff headers: +++ b/path/to/file or --- a/path/to/file
+            if line.startswith('+++') or line.startswith('---'):
+                # Extract file path
+                parts = line.split(maxsplit=1)
+                if len(parts) > 1:
+                    file_path = parts[1]
+                    # Remove a/ or b/ prefix
+                    if file_path.startswith(('a/', 'b/')):
+                        file_path = file_path[2:]
+                    if file_path and file_path != '/dev/null':
+                        changed_files.append(file_path)
+
+            # Also try File: format
+            elif line.startswith('File:'):
+                file_path = line.replace('File:', '').strip()
+                if file_path:
+                    changed_files.append(file_path)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_files = []
+        for f in changed_files:
+            if f not in seen:
+                seen.add(f)
+                unique_files.append(f)
+
+        return unique_files

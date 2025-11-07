@@ -147,6 +147,56 @@ REVIEW_STORE_PATH = get_env_str("REVIEW_STORE_PATH", "./data/reviews")
 
 
 # ============================================================================
+# DeepWiki Integration Configuration
+# ============================================================================
+
+# DeepWiki MCP endpoints
+DEEPWIKI_MCP_URL = get_env_str(
+    "DEEPWIKI_MCP_URL",
+    "https://mcp.deepwiki.com/mcp"
+)
+DEEPWIKI_SSE_URL = get_env_str(
+    "DEEPWIKI_SSE_URL",
+    "https://mcp.deepwiki.com/sse"
+)
+
+# DeepWiki feature flags and timeouts
+DEEPWIKI_ENABLED = get_env_str("DEEPWIKI_ENABLED", "true").lower() in ("true", "1", "yes")
+DEEPWIKI_TIMEOUT = get_env_int("DEEPWIKI_TIMEOUT", 30)
+DEEPWIKI_CACHE_TTL = get_env_int("DEEPWIKI_CACHE_TTL", 3600)
+DEEPWIKI_MAX_RETRIES = get_env_int("DEEPWIKI_MAX_RETRIES", 3)
+
+
+# ============================================================================
+# Devin Integration Configuration (for private repos)
+# ============================================================================
+
+# Devin API for private repository indexing
+DEVIN_API_KEY = get_env_str("DEVIN_API_KEY", "")  # Empty = disabled
+DEVIN_API_URL = get_env_str("DEVIN_API_URL", "https://api.devin.ai")
+DEVIN_TIMEOUT = get_env_int("DEVIN_TIMEOUT", 30)
+DEVIN_AUTO_REQUEST_INDEXING = get_env_str(
+    "DEVIN_AUTO_REQUEST_INDEXING",
+    "false"
+).lower() in ("true", "1", "yes")
+
+
+# ============================================================================
+# Dependency Graph Configuration
+# ============================================================================
+
+# Graph caching and performance
+GRAPH_CACHE_TTL = get_env_int("GRAPH_CACHE_TTL", 3600)
+GRAPH_BUILD_TIMEOUT = get_env_int("GRAPH_BUILD_TIMEOUT", 60)
+GRAPH_MAX_DEPTH = get_env_int("GRAPH_MAX_DEPTH", 10)
+
+# Impact analysis thresholds
+GRAPH_RISK_THRESHOLD_LOW = get_env_float("GRAPH_RISK_THRESHOLD_LOW", 0.05)
+GRAPH_RISK_THRESHOLD_MEDIUM = get_env_float("GRAPH_RISK_THRESHOLD_MEDIUM", 0.15)
+GRAPH_RISK_THRESHOLD_HIGH = get_env_float("GRAPH_RISK_THRESHOLD_HIGH", 0.30)
+
+
+# ============================================================================
 # HTTP Status Codes (for reference)
 # ============================================================================
 
@@ -219,5 +269,29 @@ def get_config_dict() -> dict:
         },
         "storage": {
             "review_store_path": REVIEW_STORE_PATH,
+        },
+        "deepwiki": {
+            "mcp_url": DEEPWIKI_MCP_URL,
+            "sse_url": DEEPWIKI_SSE_URL,
+            "enabled": DEEPWIKI_ENABLED,
+            "timeout": DEEPWIKI_TIMEOUT,
+            "cache_ttl": DEEPWIKI_CACHE_TTL,
+            "max_retries": DEEPWIKI_MAX_RETRIES,
+        },
+        "devin": {
+            "api_url": DEVIN_API_URL,
+            "api_key_set": bool(DEVIN_API_KEY),  # Don't expose actual key
+            "timeout": DEVIN_TIMEOUT,
+            "auto_request_indexing": DEVIN_AUTO_REQUEST_INDEXING,
+        },
+        "graph": {
+            "cache_ttl": GRAPH_CACHE_TTL,
+            "build_timeout": GRAPH_BUILD_TIMEOUT,
+            "max_depth": GRAPH_MAX_DEPTH,
+            "risk_thresholds": {
+                "low": GRAPH_RISK_THRESHOLD_LOW,
+                "medium": GRAPH_RISK_THRESHOLD_MEDIUM,
+                "high": GRAPH_RISK_THRESHOLD_HIGH,
+            },
         },
     }

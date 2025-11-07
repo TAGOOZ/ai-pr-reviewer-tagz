@@ -88,20 +88,24 @@ def count_lines_of_code(code: str) -> int:
 def extract_requirements_list(text: str) -> List[str]:
     """Extract requirements from numbered or bulleted lists.
 
-    Looks for patterns like:
-    - 1. Requirement
-    - * Requirement
-    - - Requirement
+    Prioritizes numbered lists (1., 2., etc.) as the main requirements.
+    Falls back to bullet points (-, *) only if no numbered list exists.
+
+    Ignores bullet points that appear under "acceptance criteria" sections
+    when numbered requirements exist.
     """
     requirements = []
 
     # Pattern for numbered lists (1., 2., etc.)
     numbered = re.findall(r'^\s*\d+\.\s+(.+)$', text, re.MULTILINE)
-    requirements.extend(numbered)
 
-    # Pattern for bullet points (-, *, etc.)
-    bulleted = re.findall(r'^\s*[-*]\s+(.+)$', text, re.MULTILINE)
-    requirements.extend(bulleted)
+    if numbered:
+        # If we have numbered requirements, use only those
+        requirements.extend(numbered)
+    else:
+        # Fall back to bullet points only if no numbered list
+        bulleted = re.findall(r'^\s*[-*]\s+(.+)$', text, re.MULTILINE)
+        requirements.extend(bulleted)
 
     # Remove duplicates while preserving order
     seen = set()

@@ -222,6 +222,16 @@ class ReviewAgent(dspy.Module):
             confidence_score=sum(confidence_scores.values()) / len(confidence_scores)
         )
         
+        # NEW: Extract hybrid context metadata if available
+        hybrid_metadata = {}
+        if hasattr(context_response, 'metadata') and context_response.metadata:
+            if context_response.metadata.get('hybrid_context_enabled'):
+                hybrid_metadata = {
+                    "context_sources": context_response.metadata.get('context_sources', []),
+                    "graph_risk_level": context_response.metadata.get('graph_risk_level', 'UNKNOWN'),
+                    "deepwiki_available": context_response.metadata.get('deepwiki_available', False),
+                }
+
         return ReviewAgentResponse(
             agent_id="review_agent",
             confidence_score=sum(confidence_scores.values()) / len(confidence_scores) if confidence_scores else 0.8,
@@ -235,7 +245,9 @@ class ReviewAgent(dspy.Module):
                 "code_language": code_language,
                 "analysis_type": analysis_type,
                 "model_selection": selection_metadata,
-                "performance_metrics": self.performance_tracker.get_recent_metrics(selected_model)
+                "performance_metrics": self.performance_tracker.get_recent_metrics(selected_model),
+                # NEW: Hybrid context metadata
+                "hybrid_context": hybrid_metadata if hybrid_metadata else None
             }
         )
     
@@ -244,7 +256,15 @@ class ReviewAgent(dspy.Module):
         # Base complexity from change size
         lines = code_changes.count('\n')
         size_complexity = min(1.0, lines / 200)
-        
+
+        # NEW: Factor in graph-based risk assessment
+        graph_complexity = 0.0
+        if hasattr(context_response, 'metadata') and context_response.metadata:
+            graph_risk = context_response.metadata.get('graph_risk_level', '')
+            if graph_risk:
+                from ..integrations.context_adapter import ContextAdapter
+                graph_complexity = ContextAdapter.get_risk_level_weight(graph_risk) * 0.3
+
         # Structural complexity
         structural_keywords = ['class', 'function', 'async', 'lambda', 'decorator']
         structural_count = sum(code_changes.lower().count(keyword) for keyword in structural_keywords)
@@ -262,20 +282,39 @@ class ReviewAgent(dspy.Module):
         # Risk complexity
         risk_assessment = context_response.metadata.get("risk_assessment", {})
         risk_level = 0.5  # default medium risk
-        if risk_assessment.get("complexity") == "high":
-            risk_level = 0.9
-        elif risk_assessment.get("complexity") == "low":
-            risk_level = 0.3
-        
+        if isinstance(risk_assessment, dict):
+            if risk_assessment.get("complexity") == "high":
+                risk_level = 0.9
+            elif risk_assessment.get("complexity") == "low":
+                risk_level = 0.3
+        elif isinstance(risk_assessment, str):
+            # Handle string risk_assessment
+            if risk_assessment.lower() == "high":
+                risk_level = 0.9
+            elif risk_assessment.lower() == "low":
+                risk_level = 0.3
+
         # Weighted combination
-        complexity_score = (
-            size_complexity * 0.2 +
-            structural_complexity * 0.3 +
-            logic_complexity * 0.3 +
-            context_complexity * 0.1 +
-            risk_level * 0.1
-        )
-        
+        if graph_complexity > 0:
+            # With graph context: rebalance weights to include graph complexity
+            complexity_score = (
+                size_complexity * 0.15 +
+                structural_complexity * 0.25 +
+                logic_complexity * 0.25 +
+                context_complexity * 0.10 +
+                risk_level * 0.05 +
+                graph_complexity * 0.20  # NEW: Graph-based risk has significant weight
+            )
+        else:
+            # Without graph context: use original weights
+            complexity_score = (
+                size_complexity * 0.2 +
+                structural_complexity * 0.3 +
+                logic_complexity * 0.3 +
+                context_complexity * 0.1 +
+                risk_level * 0.1
+            )
+
         return min(1.0, complexity_score)
     
     def _detect_primary_language(self, code_changes: str) -> str:
@@ -285,7 +324,7 @@ class ReviewAgent(dspy.Module):
             "javascript": [r"function \w+", r"const \w+", r"let \w+", r"=>"],
             "rust": [r"fn \w+", r"struct \w+", r"impl \w+", r"let mut"],
             "java": [r"public class", r"private void", r"public static"],
-            "go": [r"func \w+", r"type \w+ struct", r"import ("]
+            "go": [r"func \w+", r"type \w+ struct", r"import \("]  # Fixed: escaped parenthesis
         }
         
         scores = {}

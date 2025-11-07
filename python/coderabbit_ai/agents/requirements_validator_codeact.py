@@ -89,36 +89,43 @@ code_text = context.get('code_changes', '')
 requirements = extract_requirements_list(requirements_text)
 functions = extract_function_names(code_text)
 
-debug_matches = []
+# Match requirements to functions
 implemented = []
 missing = []
+matched_functions = set()  # Track which functions matched
+
 for req in requirements:
     found = False
     for func in functions:
-        matches = keyword_match(req, func)
-        debug_matches.append({'req': req, 'func': func, 'matched': matches})
-        if matches:
+        if keyword_match(req, func):
             implemented.append(req)
+            matched_functions.add(func)
             found = True
             break
     if not found:
         missing.append(req)
 
+# Find extra features (functions that didn't match any requirement)
+extra = [f for f in functions if f not in matched_functions]
+
+# Determine status and alignment
+if len(missing) == 0 and len(extra) == 0:
+    status = 'COMPLETE'
+    alignment = 'EXACT'
+elif len(missing) == 0 and len(extra) > 0:
+    status = 'SCOPE_CREEP'
+    alignment = 'EXTRA'
+else:
+    status = 'INCOMPLETE'
+    alignment = 'MISSING' if len(extra) == 0 else 'BOTH'
+
 result = {
     'required_count': len(requirements),
     'implemented_count': len(implemented),
     'missing_features': missing,
-    'extra_features': [],
-    'status': 'COMPLETE' if len(implemented) == len(requirements) else 'INCOMPLETE',
-    'scope_alignment': 'EXACT' if len(implemented) == len(requirements) else 'MISSING',
-    'debug_data': {
-        'requirements_text_len': len(requirements_text),
-        'code_text_len': len(code_text),
-        'code_text_preview': code_text[:200],  # First 200 chars
-        'requirements_found': requirements,
-        'functions_found': functions,
-        'matches': debug_matches[:20]  # Limit matches to first 20
-    }
+    'extra_features': extra,
+    'status': status,
+    'scope_alignment': alignment
 }
 """
 
@@ -142,7 +149,6 @@ result = {
 
         # Ensure result has the expected structure with defaults
         analysis = result.get('result') or {}
-        logger.info(f"Raw analysis result: {analysis}")
 
         # Add defaults for missing fields
         if not isinstance(analysis, dict):
