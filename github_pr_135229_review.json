@@ -1,0 +1,13 @@
+{
+  "review_id": "review_1762565501",
+  "status": "completed",
+  "comments": [],
+  "metrics": {
+    "analysis_time_ms": 21398,
+    "files_analyzed": 10,
+    "issues_found": 0,
+    "ai_cost": 0.0249
+  },
+  "security_summary": null,
+  "security_recommendation": null
+}

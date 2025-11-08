@@ -18,6 +18,7 @@ from .models import ReviewRequest, ReviewResponse
 from .pipeline import CodeRabbitMultiAgentPipeline
 from .embeddings import get_embedding_service
 from . import config
+from .dashboard import router as dashboard_router
 
 
 # Global pipeline instance
@@ -144,6 +145,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include dashboard router
+app.include_router(dashboard_router)
 
 
 @app.get("/health")

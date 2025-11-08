@@ -7,6 +7,7 @@ from .models import (
     ReviewRequest,
     ReviewResponse,
     ReviewComment,
+    CommentType,
     ContextData,
     ReviewMetrics,
     SecurityFinding
@@ -119,40 +120,44 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             codeact_results
         )
 
-        # Step 6: Phase 3 Security Aggregation
+        # Step 6: Phase 3 Security Aggregation (ALWAYS RUN)
         security_summary = None
         security_recommendation_dict = None
-        if hasattr(context_data, 'security_findings') and context_data.security_findings:
-            try:
-                # Aggregate security findings
-                context_metadata = getattr(context_response, 'metadata', {})
-                prioritized_findings, security_summary, security_recommendation = self.security_aggregator.aggregate(
-                    security_findings=context_data.security_findings,
-                    context_metadata=context_metadata,
-                    verification_findings=verification_responses
-                )
+        try:
+            # Collect security findings from multiple sources
+            security_findings_list = []
 
-                # Convert security findings to comments
-                security_comments = self.security_aggregator.convert_to_comments(
-                    prioritized_findings,
-                    security_recommendation
-                )
+            # Source 1: AST-Grep static analysis findings (if available)
+            if hasattr(context_data, 'security_findings') and context_data.security_findings:
+                security_findings_list.extend(context_data.security_findings)
+                logger.info(f"Phase 3: Found {len(context_data.security_findings)} AST-Grep findings")
 
-                # Add security comments to final comments (prepend for visibility)
-                final_comments = security_comments + final_comments
+            # Source 2: Convert existing high-severity comments to security findings
+            # This ensures SecurityAggregator runs even without AST-Grep
+            comment_security_findings = self._comments_to_security_findings(final_comments)
+            security_findings_list.extend(comment_security_findings)
+            logger.info(f"Phase 3: Converted {len(comment_security_findings)} comments to security findings")
 
-                # Convert SecurityRecommendation dataclass to dict for model
-                security_recommendation_dict = {
-                    "action": security_recommendation.action,
-                    "severity_level": security_recommendation.severity_level,
-                    "message": security_recommendation.message,
-                    "total_issues": security_recommendation.total_issues
-                }
+            # Run Security Aggregator
+            context_metadata = getattr(context_response, 'metadata', {})
+            prioritized_findings, security_summary, security_recommendation = self.security_aggregator.aggregate(
+                security_findings=security_findings_list,
+                context_metadata=context_metadata,
+                verification_findings=verification_responses
+            )
 
-                logger.info(f"Phase 3: Aggregated {len(prioritized_findings)} security findings, "
-                           f"recommendation: {security_recommendation.action}")
-            except Exception as e:
-                logger.error(f"Phase 3 security aggregation failed: {e}", exc_info=True)
+            # Convert SecurityRecommendation dataclass to dict for model
+            security_recommendation_dict = {
+                "action": security_recommendation.action,
+                "severity_level": security_recommendation.severity_level,
+                "message": security_recommendation.message,
+                "total_issues": security_recommendation.total_issues
+            }
+
+            logger.info(f"Phase 3: Aggregated {len(prioritized_findings)} security findings, "
+                       f"recommendation: {security_recommendation.action}")
+        except Exception as e:
+            logger.error(f"Phase 3 security aggregation failed: {e}", exc_info=True)
 
         # Calculate metrics
         processing_time = int((time.time() - start_time) * 1000)
@@ -519,13 +524,26 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             for finding in findings:
                 # Only include findings if consensus score is reasonable
                 if consensus_score >= 0.6:
+                    # Map severity to valid values
+                    severity = finding.get("severity", "low")
+                    if severity not in ["low", "medium", "high", "critical"]:
+                        severity = "medium"
+
+                    # Generate unique ID
+                    import hashlib
+                    finding_id = hashlib.md5(
+                        f"{finding.get('file_path', 'unknown')}:{finding.get('line_number', 0)}:{finding.get('message', '')}".encode()
+                    ).hexdigest()[:8]
+
                     comment = ReviewComment(
+                        id=finding_id,
                         file_path=finding.get("file_path", "unknown"),
                         line_number=finding.get("line_number", 0),
+                        comment_type=CommentType.ISSUE,
                         message=finding.get("message", ""),
-                        severity=finding.get("severity", "info"),
-                        category=finding.get("category", "general"),
-                        suggestion=finding.get("suggestion", None)
+                        severity=severity,
+                        suggested_fix=finding.get("suggestion", None),
+                        confidence_score=min(1.0, consensus_score)
                     )
                     final_comments.append(comment)
 
@@ -596,8 +614,12 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
         return findings
 
     def _parse_verification_findings(self, findings_text: str, consensus: Dict[str, Any]) -> List[ReviewComment]:
-        """Parse verification agent findings into comments."""
+        """Parse verification agent findings into comments, splitting numbered lists."""
+        import re
+        import hashlib
+
         comments = []
+        base_consensus_score = consensus.get("consensus_score", 0.7)
 
         # Extract specialization-specific findings
         sections = findings_text.split("**[")
@@ -616,22 +638,115 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
 
             # Extract the actual finding (before confidence line)
             content_lines = content.split("*Confidence:")
-            if content_lines:
-                finding_text = content_lines[0].strip()
+            if not content_lines:
+                continue
 
-                # Create a comment for this finding
-                if finding_text:
-                    comment = ReviewComment(
-                        file_path="multiple",  # Verification findings are often cross-file
-                        line_number=0,
-                        message=finding_text,
-                        severity=self._map_specialization_to_severity(specialization),
-                        category=specialization,
-                        suggestion=None
-                    )
-                    comments.append(comment)
+            finding_text = content_lines[0].strip()
+            if not finding_text:
+                continue
+
+            # Split numbered lists into individual findings
+            # Pattern: "1. ", "2. ", etc. at start of line or after newline
+            numbered_items = re.split(r'(?:^|\n)\s*(\d+)\.\s+', finding_text)
+
+            # Re-pair numbers with their content
+            items = []
+            for i in range(1, len(numbered_items), 2):
+                if i + 1 < len(numbered_items):
+                    items.append(numbered_items[i + 1].strip())
+
+            # If no numbered items found, treat whole text as one item
+            if not items:
+                items = [finding_text]
+
+            # Process each item as a separate comment
+            for idx, item in enumerate(items):
+                if not item.strip():
+                    continue
+
+                # Extract file path from backticks (e.g., `assets/theme.js`:)
+                file_match = re.search(r'`([^`]+\.(?:js|css|json|liquid|yml|yaml|html|py|rb|java|go|ts|tsx))`', item)
+                file_path = file_match.group(1) if file_match else "multiple"
+
+                # Clean up the message
+                message = item.strip()
+
+                # Vary confidence based on position and specialization
+                confidence_variation = 1.0
+                if specialization == "security":
+                    confidence_variation = 1.05  # Boost security findings
+                elif specialization == "style":
+                    confidence_variation = 0.95  # Lower style findings
+
+                # Slight decrease for items later in list (less critical)
+                position_factor = max(0.85, 1.0 - (idx * 0.03))
+
+                item_confidence = min(1.0, base_consensus_score * confidence_variation * position_factor)
+
+                # Generate unique ID
+                finding_id = hashlib.md5(
+                    f"{file_path}:{specialization}:{message[:100]}".encode()
+                ).hexdigest()[:8]
+
+                # Infer severity from message content
+                severity = self._infer_severity_from_message(message, specialization)
+
+                comment = ReviewComment(
+                    id=finding_id,
+                    file_path=file_path,
+                    line_number=0,
+                    comment_type=CommentType.ISSUE,
+                    message=message,
+                    severity=severity,
+                    suggested_fix=None,
+                    confidence_score=item_confidence
+                )
+                comments.append(comment)
 
         return comments
+
+    def _infer_severity_from_message(self, message: str, specialization: str) -> str:
+        """Infer severity level from message content keywords."""
+        message_lower = message.lower()
+
+        # Critical keywords
+        critical_keywords = [
+            "security vulnerabilit", "sql injection", "xss", "cross-site scripting",
+            "authentication", "authorization", "credential", "password", "secret",
+            "will prevent", "will break", "syntax error", "will not execute",
+            "cannot execute", "will fail", "invalid json", "invalid liquid"
+        ]
+
+        # High keywords
+        high_keywords = [
+            "missing", "error", "incorrect", "broken", "issue",
+            "should be fixed", "needs to be", "must be", "can lead to",
+            "rendering problem", "trailing comma"
+        ]
+
+        # Check for critical issues
+        for keyword in critical_keywords:
+            if keyword in message_lower:
+                return "critical"
+
+        # Check for high priority
+        for keyword in high_keywords:
+            if keyword in message_lower:
+                return "high"
+
+        # Positive changes are low severity (informational)
+        if "positive change" in message_lower or "good practice" in message_lower:
+            return "low"
+
+        # Specialization-based defaults
+        if specialization == "security":
+            return "high"
+        elif specialization == "performance":
+            return "medium"
+        elif specialization == "style":
+            return "low"
+
+        return self._map_specialization_to_severity(specialization)
 
     def _map_specialization_to_severity(self, specialization: str) -> str:
         """Map verification specialization to severity level."""
@@ -647,7 +762,40 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
             "architecture": "medium",
             "dependencies": "high"
         }
-        return severity_map.get(specialization, "info")
+        return severity_map.get(specialization, "medium")
+
+    def _create_review_comment(
+        self,
+        file_path: str,
+        line_number: int,
+        message: str,
+        severity: str,
+        category: str = "general",
+        suggestion: str = None,
+        confidence: float = 0.7
+    ) -> ReviewComment:
+        """Helper to create ReviewComment with all required fields."""
+        import hashlib
+
+        # Generate unique ID
+        comment_id = hashlib.md5(
+            f"{file_path}:{line_number}:{message[:100]}".encode()
+        ).hexdigest()[:8]
+
+        # Ensure severity is valid
+        if severity not in ["low", "medium", "high", "critical"]:
+            severity = "medium"
+
+        return ReviewComment(
+            id=comment_id,
+            file_path=file_path,
+            line_number=line_number,
+            comment_type=CommentType.ISSUE,
+            message=message,
+            severity=severity,
+            suggested_fix=suggestion,
+            confidence_score=min(1.0, max(0.0, confidence))
+        )
 
     def _parse_codeact_findings(self, codeact_results: Dict[str, Any]) -> List[ReviewComment]:
         """Parse CodeAct analysis results into review comments."""
@@ -667,7 +815,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                     message += f"Implemented {implemented_count}/{required_count} features\n"
                     message += "Missing:\n" + "\n".join(f"- {f}" for f in missing)
 
-                    comments.append(ReviewComment(
+                    comments.append(self._create_review_comment(
                         file_path="requirements",
                         line_number=0,
                         message=message,
@@ -685,7 +833,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                     message += f"Implemented {implemented_count} features but only {required_count} required\n"
                     message += "Extra features:\n" + "\n".join(f"- {f}" for f in extra)
 
-                    comments.append(ReviewComment(
+                    comments.append(self._create_review_comment(
                         file_path="requirements",
                         line_number=0,
                         message=message,
@@ -707,7 +855,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 for rc in race_conditions[:3]:  # Limit to top 3
                     message += f"- {rc}\n"
 
-                comments.append(ReviewComment(
+                comments.append(self._create_review_comment(
                     file_path="business_logic",
                     line_number=0,
                     message=message,
@@ -723,7 +871,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 for ec in edge_cases[:3]:  # Limit to top 3
                     message += f"- {ec}\n"
 
-                comments.append(ReviewComment(
+                comments.append(self._create_review_comment(
                     file_path="business_logic",
                     line_number=0,
                     message=message,
@@ -744,7 +892,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                     message += f"High cyclomatic complexity: {complexity}\n"
                 message += metrics_data.get('summary', '')
 
-                comments.append(ReviewComment(
+                comments.append(self._create_review_comment(
                     file_path="metrics",
                     line_number=0,
                     message=message,
@@ -785,6 +933,101 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
         estimated_cost += len(verification_responses) * 0.0005
         
         return round(estimated_cost, 4)
+
+    def _comments_to_security_findings(self, comments: List[ReviewComment]) -> List[SecurityFinding]:
+        """
+        Convert ReviewComments to SecurityFinding objects for aggregation.
+        Only converts comments with severity critical/high that look like security issues.
+        """
+        security_findings = []
+
+        for comment in comments:
+            # Only convert high-severity comments
+            if comment.severity not in ["critical", "high"]:
+                continue
+
+            # Determine category and rule from message keywords
+            message_lower = comment.message.lower()
+            category = "general"
+            rule_id = "ai-review"
+
+            # Categorize based on keywords
+            if any(kw in message_lower for kw in ["sql injection", "sql query", "database query"]):
+                category = "injection"
+                rule_id = "sql-injection-detected"
+            elif any(kw in message_lower for kw in ["xss", "cross-site scripting", "unsafe html"]):
+                category = "xss"
+                rule_id = "xss-vulnerability-detected"
+            elif any(kw in message_lower for kw in ["hardcoded", "credential", "secret", "password", "api key"]):
+                category = "secrets"
+                rule_id = "hardcoded-credentials"
+            elif any(kw in message_lower for kw in ["authentication", "authorization", "session"]):
+                category = "authentication"
+                rule_id = "auth-vulnerability"
+            elif any(kw in message_lower for kw in ["input validation", "sanitiz", "escap"]):
+                category = "input-validation"
+                rule_id = "missing-input-validation"
+            elif any(kw in message_lower for kw in ["crypto", "encryption", "hash", "md5", "sha1"]):
+                category = "cryptography"
+                rule_id = "weak-cryptography"
+
+            # Create SecurityFinding from comment
+            finding = SecurityFinding(
+                file=comment.file_path,
+                line=comment.line_number,
+                severity=comment.severity,
+                rule_id=rule_id,
+                category=category,
+                message=comment.message[:200],  # Truncate for summary
+                tool="ai-review",
+                confidence=comment.confidence_score,
+                code_snippet=None,
+                suggestion=comment.suggested_fix,
+                cwe_id=None,
+                owasp_category=None,
+                references=[]
+            )
+            security_findings.append(finding)
+
+        return security_findings
+
+    def _parse_line_numbers_from_diffs(self, file_changes: List) -> Dict[str, Dict[int, int]]:
+        """
+        Parse diff hunks to map old line numbers to new line numbers.
+
+        Returns:
+            Dict mapping file_path -> {old_line_num: new_line_num}
+        """
+        import re
+
+        line_mappings = {}
+
+        for file_change in file_changes:
+            if not hasattr(file_change, 'diff') or not file_change.diff:
+                continue
+
+            file_path = file_change.path
+            mappings = {}
+
+            # Parse diff hunks: @@ -10,5 +12,7 @@
+            # This means: old file line 10, 5 lines -> new file line 12, 7 lines
+            hunk_pattern = r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@'
+            hunks = re.finditer(hunk_pattern, file_change.diff)
+
+            for hunk in hunks:
+                old_start = int(hunk.group(1))
+                old_count = int(hunk.group(2)) if hunk.group(2) else 1
+                new_start = int(hunk.group(3))
+                new_count = int(hunk.group(4)) if hunk.group(4) else 1
+
+                # Simple mapping: assume 1:1 correspondence within hunk
+                # More sophisticated mapping would require parsing +/- lines
+                for i in range(min(old_count, new_count)):
+                    mappings[old_start + i] = new_start + i
+
+            line_mappings[file_path] = mappings
+
+        return line_mappings
 
 
 class PipelineOptimizer:
@@ -993,3 +1236,99 @@ class PipelineOptimizer:
             "false_positives": total_fp,
             "missed_issues": total_fn,
         }
+
+    def _comments_to_security_findings(self, comments: List[ReviewComment]) -> List[SecurityFinding]:
+        """
+        Convert ReviewComments to SecurityFinding objects for aggregation.
+        Only converts comments with severity critical/high that look like security issues.
+        """
+        security_findings = []
+        
+        for comment in comments:
+            # Only convert high-severity comments
+            if comment.severity not in ["critical", "high"]:
+                continue
+            
+            # Determine category and rule from message keywords
+            message_lower = comment.message.lower()
+            category = "general"
+            rule_id = "ai-review"
+            
+            # Categorize based on keywords
+            if any(kw in message_lower for kw in ["sql injection", "sql query", "execute query"]):
+                category = "injection"
+                rule_id = "sql-injection-detected"
+            elif any(kw in message_lower for kw in ["xss", "cross-site scripting", "render_template_string"]):
+                category = "xss"
+                rule_id = "xss-vulnerability-detected"
+            elif any(kw in message_lower for kw in ["hardcoded", "credential", "password", "secret", "api key", "api_key"]):
+                category = "secrets"
+                rule_id = "hardcoded-secrets-detected"
+            elif any(kw in message_lower for kw in ["md5", "sha1", "weak hash", "weak crypto"]):
+                category = "crypto"
+                rule_id = "weak-cryptography-detected"
+            elif any(kw in message_lower for kw in ["authentication", "authorization", "session"]):
+                category = "auth"
+                rule_id = "authentication-issue-detected"
+            elif any(kw in message_lower for kw in ["syntax error", "will not execute", "will break"]):
+                category = "syntax"
+                rule_id = "critical-syntax-error"
+            elif any(kw in message_lower for kw in ["security vulnerabilit", "security issue"]):
+                category = "security"
+                rule_id = "security-vulnerability-detected"
+            
+            # Create SecurityFinding
+            finding = SecurityFinding(
+                file=comment.file_path,
+                line=comment.line_number,
+                severity=comment.severity,
+                rule_id=rule_id,
+                category=category,
+                message=comment.message[:200],  # Truncate for summary
+                tool="ai-review",
+                confidence=comment.confidence_score,
+                code_snippet=None,
+                suggestion=comment.suggested_fix,
+                cwe_id=None,
+                owasp_category=None,
+                references=[]
+            )
+            security_findings.append(finding)
+        
+        return security_findings
+
+    def _parse_line_numbers_from_diffs(self, file_changes: List) -> Dict[str, Dict[int, int]]:
+        """
+        Parse diff hunks to map old line numbers to new line numbers.
+        
+        Returns:
+            Dict[file_path, Dict[old_line, new_line]]
+        """
+        import re
+        
+        line_mappings = {}
+        
+        for file_change in file_changes:
+            if not hasattr(file_change, 'diff') or not file_change.diff:
+                continue
+            
+            file_path = file_change.path
+            mappings = {}
+            
+            # Parse diff hunks: @@ -10,5 +12,7 @@
+            hunk_pattern = r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@'
+            hunks = re.finditer(hunk_pattern, file_change.diff)
+            
+            for hunk in hunks:
+                old_start = int(hunk.group(1))
+                old_count = int(hunk.group(2)) if hunk.group(2) else 1
+                new_start = int(hunk.group(3))
+                new_count = int(hunk.group(4)) if hunk.group(4) else 1
+                
+                # Simple mapping: assume 1:1 correspondence within hunk
+                for i in range(min(old_count, new_count)):
+                    mappings[old_start + i] = new_start + i
+            
+            line_mappings[file_path] = mappings
+        
+        return line_mappings
