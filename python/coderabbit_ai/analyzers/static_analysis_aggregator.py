@@ -45,7 +45,8 @@ class StaticAnalysisAggregator:
                     rules_repo=config.ASTGREP_RULES_REPO,
                     rules_path=config.ASTGREP_RULES_PATH,
                     cache_ttl=config.ASTGREP_CACHE_TTL,
-                    auto_update=config.ASTGREP_AUTO_UPDATE
+                    auto_update=config.ASTGREP_AUTO_UPDATE,
+                    use_sandbox=config.get_env_bool("ASTGREP_USE_SANDBOX", False)
                 )
                 logger.info("AST-Grep scanner initialized")
             except Exception as e:

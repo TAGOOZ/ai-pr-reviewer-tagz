@@ -23,6 +23,12 @@ def get_env_str(key: str, default: str) -> str:
     return os.getenv(key, default)
 
 
+def get_env_bool(key: str, default: bool) -> bool:
+    """Get boolean value from environment or use default."""
+    value = os.getenv(key, str(default)).lower()
+    return value in ("true", "1", "yes")
+
+
 # ============================================================================
 # Service URLs and Network Configuration
 # ============================================================================

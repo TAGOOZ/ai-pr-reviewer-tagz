@@ -31,7 +31,8 @@ class AstGrepScanner:
         rules_repo: str = "coderabbitai/ast-grep-essentials",
         rules_path: Optional[str] = None,
         cache_ttl: int = 86400,  # 24 hours in seconds
-        auto_update: bool = True
+        auto_update: bool = True,
+        use_sandbox: bool = False
     ):
         """
         Initialize AST-Grep scanner.
@@ -41,11 +42,28 @@ class AstGrepScanner:
             rules_path: Local path to cache rules (defaults to config.ASTGREP_RULES_PATH)
             cache_ttl: Cache TTL in seconds (default: 24 hours)
             auto_update: Automatically update rules if cache is stale
+            use_sandbox: Run ast-grep in Docker sandbox for security (recommended for untrusted code)
         """
         self.rules_repo = rules_repo
         self.rules_path = Path(rules_path or config.ASTGREP_RULES_PATH)
         self.cache_ttl = cache_ttl
         self.auto_update = auto_update
+        self.use_sandbox = use_sandbox
+
+        # Initialize sandbox if enabled
+        self.sandbox = None
+        if self.use_sandbox:
+            try:
+                from ..codeact import CodeSandbox
+                self.sandbox = CodeSandbox(
+                    timeout=60,  # ast-grep needs more time than regular code
+                    max_memory_mb=256,  # Lighter memory for static analysis
+                    max_cpus=1.0
+                )
+                logger.info("AST-Grep will run in sandboxed mode")
+            except ImportError:
+                logger.warning("CodeSandbox not available, falling back to direct execution")
+                self.use_sandbox = False
 
         # Ensure rules are available
         self._ensure_rules_available()
@@ -162,17 +180,17 @@ class AstGrepScanner:
             return []
 
         if language:
-            # Search specific language directory
+            # Search specific language directory recursively
             lang_dir = rules_dir / language
             if lang_dir.exists():
-                rule_files.extend(lang_dir.glob("*.yml"))
-                rule_files.extend(lang_dir.glob("*.yaml"))
+                rule_files.extend(lang_dir.rglob("*.yml"))
+                rule_files.extend(lang_dir.rglob("*.yaml"))
         else:
-            # Search all language directories
+            # Search all language directories recursively
             for lang_dir in rules_dir.iterdir():
                 if lang_dir.is_dir():
-                    rule_files.extend(lang_dir.glob("*.yml"))
-                    rule_files.extend(lang_dir.glob("*.yaml"))
+                    rule_files.extend(lang_dir.rglob("*.yml"))
+                    rule_files.extend(lang_dir.rglob("*.yaml"))
 
         return rule_files
 
@@ -259,6 +277,18 @@ class AstGrepScanner:
         Returns:
             List of SecurityFinding objects
         """
+        if self.use_sandbox and self.sandbox:
+            return self._scan_file_sandboxed(file_path, project_root, rule_files)
+        else:
+            return self._scan_file_direct(file_path, project_root, rule_files)
+
+    def _scan_file_direct(
+        self,
+        file_path: Path,
+        project_root: str,
+        rule_files: List[Path]
+    ) -> List[SecurityFinding]:
+        """Scan file directly on host (NOT sandboxed)."""
         findings = []
 
         for rule_file in rule_files:
@@ -297,6 +327,91 @@ class AstGrepScanner:
                 logger.warning(f"Failed to parse ast-grep output: {e}")
             except Exception as e:
                 logger.warning(f"Error scanning {file_path} with {rule_file.name}: {e}")
+
+        return findings
+
+    def _scan_file_sandboxed(
+        self,
+        file_path: Path,
+        project_root: str,
+        rule_files: List[Path]
+    ) -> List[SecurityFinding]:
+        """Scan file in Docker sandbox (secure)."""
+        findings = []
+
+        try:
+            # Read file content
+            file_content = file_path.read_text()
+
+            # Read rule files content
+            rules_content = {}
+            for rule_file in rule_files:
+                rules_content[rule_file.name] = rule_file.read_text()
+
+            # Generate sandbox code to run ast-grep
+            code = f'''
+import subprocess
+import json
+from pathlib import Path
+
+# Write file to scan
+file_path = Path("target_file{file_path.suffix}")
+file_path.write_text(context["file_content"])
+
+# Write rule files
+rules_dir = Path("rules")
+rules_dir.mkdir(exist_ok=True)
+for rule_name, rule_content in context["rules"].items():
+    rule_file = rules_dir / rule_name
+    rule_file.write_text(rule_content)
+
+# Run ast-grep for each rule
+all_findings = []
+for rule_name in context["rules"].keys():
+    rule_path = rules_dir / rule_name
+    try:
+        result = subprocess.run(
+            ["ast-grep", "scan", "--json", "--config", str(rule_path), str(file_path)],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode == 0 and result.stdout:
+            matches = json.loads(result.stdout)
+            if matches:
+                all_findings.extend(matches)
+    except Exception as e:
+        print(f"Error scanning with {{rule_name}}: {{e}}")
+
+result = all_findings
+'''
+
+            # Execute in sandbox
+            sandbox_result = self.sandbox.execute(
+                code=code,
+                context={
+                    "file_content": file_content,
+                    "rules": rules_content
+                },
+                allowed_imports=["subprocess", "json", "pathlib"]
+            )
+
+            # Parse sandbox result
+            if "error" in sandbox_result:
+                logger.warning(f"Sandbox ast-grep failed: {sandbox_result['error']}")
+                return []
+
+            matches = sandbox_result.get("result", [])
+            if matches:
+                findings.extend(self._parse_astgrep_output(
+                    matches,
+                    file_path,
+                    project_root,
+                    None  # rule_file not needed for sandboxed results
+                ))
+
+        except Exception as e:
+            logger.error(f"Sandboxed ast-grep scan failed: {e}", exc_info=True)
 
         return findings
 

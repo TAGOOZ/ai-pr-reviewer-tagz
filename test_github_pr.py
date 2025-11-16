@@ -11,9 +11,24 @@ import requests
 # Add python directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'python'))
 
-# Set API keys and AST-Grep rules path
-os.environ['ANTHROPIC_API_KEY'] = "API_KEY"
-os.environ['ASTGREP_RULES_PATH'] = "/tmp/ast-grep-rules"
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("⚠️  python-dotenv not installed. Using system environment variables only.")
+
+# Validate required environment variables
+required_vars = ['ANTHROPIC_API_KEY', 'GITHUB_TOKEN']
+missing_vars = [var for var in required_vars if not os.environ.get(var)]
+if missing_vars:
+    print(f"❌ ERROR: Missing required environment variables: {', '.join(missing_vars)}")
+    print("Please set them in your .env file or environment.")
+    sys.exit(1)
+
+# Set AST-Grep rules path if not already set
+if 'ASTGREP_RULES_PATH' not in os.environ:
+    os.environ['ASTGREP_RULES_PATH'] = "/tmp/ast-grep-rules"
 
 from coderabbit_ai.models import (
     ReviewRequest,

@@ -3,6 +3,7 @@
 import dspy
 import logging
 from typing import Dict, Any, List, Tuple
+from . import config
 from .models import (
     ReviewRequest,
     ReviewResponse,
@@ -158,6 +159,64 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                        f"recommendation: {security_recommendation.action}")
         except Exception as e:
             logger.error(f"Phase 3 security aggregation failed: {e}", exc_info=True)
+
+        # Step 7: PR Test Execution (Optional)
+        test_result = None
+        if config.get_env_bool("ENABLE_PR_TEST_RUNNER", False):
+            try:
+                from .pr_test_runner import PRTestRunner
+                logger.info("Phase 4: Running PR tests in sandbox...")
+
+                pr_test_runner = PRTestRunner(
+                    timeout=config.get_env_int("PR_TEST_TIMEOUT", 300),
+                    max_memory_mb=config.get_env_int("PR_TEST_MAX_MEMORY_MB", 2048),
+                    max_cpus=config.get_env_float("PR_TEST_MAX_CPUS", 2.0),
+                    use_sandbox=True
+                )
+
+                # Detect language and run tests
+                test_result = pr_test_runner.run_tests(
+                    pr_files=request.pull_request.files_changed,
+                    language=None,  # Auto-detect
+                    test_command=getattr(request.config, 'test_command', None) if hasattr(request, 'config') else None
+                )
+
+                logger.info(f"Phase 4: Tests {'passed' if test_result.passed else 'FAILED'} "
+                           f"(exit code: {test_result.exit_code}, duration: {test_result.duration_ms}ms)")
+
+                # Add test result as a comment if tests failed
+                if not test_result.passed:
+                    import hashlib
+                    test_comment_id = hashlib.md5(f"test_failure_{test_result.test_command}".encode()).hexdigest()[:8]
+
+                    # Build failure message
+                    failure_msg = f"❌ **Tests Failed**\n\nCommand: `{test_result.test_command}`\n\n"
+                    if test_result.failed_tests:
+                        failure_msg += f"**Failed Tests ({len(test_result.failed_tests)}):**\n"
+                        for failed_test in test_result.failed_tests[:5]:  # Show first 5
+                            failure_msg += f"- {failed_test}\n"
+                        if len(test_result.failed_tests) > 5:
+                            failure_msg += f"- ... and {len(test_result.failed_tests) - 5} more\n"
+
+                    if test_result.stderr:
+                        failure_msg += f"\n**Error Output:**\n```\n{test_result.stderr[:500]}\n```"
+
+                    test_failure_comment = ReviewComment(
+                        id=test_comment_id,
+                        file_path="tests",
+                        line_number=0,
+                        comment_type=CommentType.ISSUE,
+                        severity="critical",
+                        message=failure_msg,
+                        suggested_fix=None,
+                        confidence_score=1.0
+                    )
+                    final_comments.insert(0, test_failure_comment)  # Add at top
+
+            except ImportError:
+                logger.warning("PR Test Runner not available - install dependencies")
+            except Exception as e:
+                logger.error(f"Phase 4 PR test execution failed: {e}", exc_info=True)
 
         # Calculate metrics
         processing_time = int((time.time() - start_time) * 1000)
