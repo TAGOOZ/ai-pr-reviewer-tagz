@@ -108,7 +108,7 @@ def convert_github_pr_to_model(pr_data, files_data):
 
     # Convert files
     file_changes = []
-    for file_data in files_data[:10]:  # Limit to first 10 files for testing
+    for file_data in files_data:  # Process all files
         # Determine change type
         status = file_data.get('status', 'modified')
         change_type_map = {

@@ -69,16 +69,20 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
     def forward(self, request: ReviewRequest) -> ReviewResponse:
         """
         Process a review request through the multi-agent pipeline.
-        
+
         Args:
             request: ReviewRequest containing repository, PR, and config data
-            
+
         Returns:
             ReviewResponse with comments and metrics
         """
         import time
         start_time = time.time()
-        
+
+        # Parse line number mappings from diffs for accurate line numbers
+        self.line_mappings = self._parse_line_numbers_from_diffs(request.pull_request.files_changed)
+        logger.info(f"Parsed line mappings for {len(self.line_mappings)} files")
+
         # Step 1: Context Engineering
         context_data = self._prepare_context_data(request)
         context_response = self.context_agent.forward(context_data)
@@ -594,10 +598,16 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                         f"{finding.get('file_path', 'unknown')}:{finding.get('line_number', 0)}:{finding.get('message', '')}".encode()
                     ).hexdigest()[:8]
 
+                    # Get line number from finding, fallback to diff mapping
+                    file_path = finding.get("file_path", "unknown")
+                    line_num = finding.get("line_number", 0)
+                    if line_num == 0:
+                        line_num = self._get_line_number_for_file(file_path)
+
                     comment = ReviewComment(
                         id=finding_id,
-                        file_path=finding.get("file_path", "unknown"),
-                        line_number=finding.get("line_number", 0),
+                        file_path=file_path,
+                        line_number=line_num,
                         comment_type=CommentType.ISSUE,
                         message=finding.get("message", ""),
                         severity=severity,
@@ -750,10 +760,13 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 # Infer severity from message content
                 severity = self._infer_severity_from_message(message, specialization)
 
+                # Get line number from diff mapping
+                line_num = self._get_line_number_for_file(file_path)
+
                 comment = ReviewComment(
                     id=finding_id,
                     file_path=file_path,
-                    line_number=0,
+                    line_number=line_num,
                     comment_type=CommentType.ISSUE,
                     message=message,
                     severity=severity,
@@ -835,6 +848,10 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
     ) -> ReviewComment:
         """Helper to create ReviewComment with all required fields."""
         import hashlib
+
+        # Use diff mapping as fallback if line_number is 0
+        if line_number == 0:
+            line_number = self._get_line_number_for_file(file_path)
 
         # Generate unique ID
         comment_id = hashlib.md5(
@@ -1079,14 +1096,39 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 new_start = int(hunk.group(3))
                 new_count = int(hunk.group(4)) if hunk.group(4) else 1
 
-                # Simple mapping: assume 1:1 correspondence within hunk
-                # More sophisticated mapping would require parsing +/- lines
-                for i in range(min(old_count, new_count)):
-                    mappings[old_start + i] = new_start + i
+                # For new files (old_count=0), just track the new line numbers
+                if old_count == 0:
+                    # Store first new line as a reference point
+                    mappings[0] = new_start
+                else:
+                    # Simple mapping: assume 1:1 correspondence within hunk
+                    for i in range(min(old_count, new_count)):
+                        mappings[old_start + i] = new_start + i
 
             line_mappings[file_path] = mappings
 
         return line_mappings
+
+    def _get_line_number_for_file(self, file_path: str) -> int:
+        """
+        Get a reasonable line number for a file from the diff.
+        Returns the first changed line number, or 0 if not available.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            Line number (first changed line or 0 if unknown)
+        """
+        if not hasattr(self, 'line_mappings'):
+            return 0
+
+        mappings = self.line_mappings.get(file_path, {})
+        if mappings:
+            # Return the first new line number from the mappings
+            return min(mappings.values())
+
+        return 0
 
 
 class PipelineOptimizer:
@@ -1356,38 +1398,3 @@ class PipelineOptimizer:
         
         return security_findings
 
-    def _parse_line_numbers_from_diffs(self, file_changes: List) -> Dict[str, Dict[int, int]]:
-        """
-        Parse diff hunks to map old line numbers to new line numbers.
-        
-        Returns:
-            Dict[file_path, Dict[old_line, new_line]]
-        """
-        import re
-        
-        line_mappings = {}
-        
-        for file_change in file_changes:
-            if not hasattr(file_change, 'diff') or not file_change.diff:
-                continue
-            
-            file_path = file_change.path
-            mappings = {}
-            
-            # Parse diff hunks: @@ -10,5 +12,7 @@
-            hunk_pattern = r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@'
-            hunks = re.finditer(hunk_pattern, file_change.diff)
-            
-            for hunk in hunks:
-                old_start = int(hunk.group(1))
-                old_count = int(hunk.group(2)) if hunk.group(2) else 1
-                new_start = int(hunk.group(3))
-                new_count = int(hunk.group(4)) if hunk.group(4) else 1
-                
-                # Simple mapping: assume 1:1 correspondence within hunk
-                for i in range(min(old_count, new_count)):
-                    mappings[old_start + i] = new_start + i
-            
-            line_mappings[file_path] = mappings
-        
-        return line_mappings
