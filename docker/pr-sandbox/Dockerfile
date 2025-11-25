@@ -23,6 +23,9 @@ RUN wget -q https://go.dev/dl/go1.21.5.linux-amd64.tar.gz && \
 # Install ast-grep for static security analysis (via npm)
 RUN npm install -g @ast-grep/cli
 
+# Install Semgrep for comprehensive security scanning
+RUN pip install --no-cache-dir semgrep==1.52.0
+
 # Install Python development tools
 RUN pip install --no-cache-dir \
     # Testing frameworks

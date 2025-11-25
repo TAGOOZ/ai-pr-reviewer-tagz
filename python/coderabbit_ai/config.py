@@ -221,7 +221,24 @@ ASTGREP_AUTO_UPDATE = get_env_str("ASTGREP_AUTO_UPDATE", "true").lower() in ("tr
 ASTGREP_SCAN_TIMEOUT = get_env_int("ASTGREP_SCAN_TIMEOUT", 30)  # Per-file timeout in seconds
 ASTGREP_MAX_FINDINGS_PER_FILE = get_env_int("ASTGREP_MAX_FINDINGS_PER_FILE", 50)
 
-# Security thresholds
+
+# ============================================================================
+# Semgrep Security Scanner Configuration
+# ============================================================================
+
+# Enable/disable Semgrep scanner
+SEMGREP_ENABLED = get_env_bool("SEMGREP_ENABLED", False)  # Disabled by default (opt-in)
+
+# Rulesets configuration
+SEMGREP_RULESETS = get_env_str("SEMGREP_RULESETS", "auto")  # Comma-separated list or "auto"
+SEMGREP_TIMEOUT = get_env_int("SEMGREP_TIMEOUT", 60)  # Timeout in seconds
+SEMGREP_MAX_FINDINGS_PER_FILE = get_env_int("SEMGREP_MAX_FINDINGS_PER_FILE", 50)
+
+
+# ============================================================================
+# Security Thresholds (applies to all scanners)
+# ============================================================================
+
 SECURITY_BLOCK_ON_CRITICAL = get_env_str("SECURITY_BLOCK_ON_CRITICAL", "true").lower() in ("true", "1", "yes")
 SECURITY_MAX_HIGH_SEVERITY = get_env_int("SECURITY_MAX_HIGH_SEVERITY", 3)
 SECURITY_CONFIDENCE_THRESHOLD = get_env_float("SECURITY_CONFIDENCE_THRESHOLD", 0.7)

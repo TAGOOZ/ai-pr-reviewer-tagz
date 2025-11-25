@@ -1,5 +1,5 @@
 {
-  "review_id": "review_1762567792",
+  "review_id": "review_1764042744",
   "status": "completed",
   "comments": [
     {
@@ -114,11 +114,33 @@
     }
   ],
   "metrics": {
-    "analysis_time_ms": 85,
+    "analysis_time_ms": 153,
     "files_analyzed": 10,
     "issues_found": 11,
     "ai_cost": 0.0058
   },
-  "security_summary": null,
-  "security_recommendation": null
+  "security_summary": {
+    "total_findings": 3,
+    "by_severity": {
+      "critical": 1,
+      "high": 2
+    },
+    "by_category": {
+      "general": 3
+    },
+    "critical_files": [
+      "assets/style.css",
+      "assets/theme.js",
+      "config/settings_schema.json"
+    ],
+    "tools_used": [
+      "ai-review"
+    ]
+  },
+  "security_recommendation": {
+    "action": "block",
+    "severity_level": "critical",
+    "message": "\u274c BLOCK MERGE: 1 critical security vulnerability detected. These must be fixed before merging.",
+    "total_issues": 3
+  }
 }

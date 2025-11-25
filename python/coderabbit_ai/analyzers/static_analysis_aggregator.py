@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 from .astgrep_scanner import AstGrepScanner
+from .semgrep_scanner import SemgrepScanner
 from ..models import SecurityFinding, SecuritySummary
 from .. import config
 
@@ -17,7 +18,7 @@ class StaticAnalysisAggregator:
 
     Features:
     - Runs traditional linters (flake8, eslint, pylint, etc.)
-    - Runs security scanners (ast-grep)
+    - Runs security scanners (ast-grep, semgrep)
     - Consolidates results into structured format
     - Handles errors gracefully
     """
@@ -25,6 +26,7 @@ class StaticAnalysisAggregator:
     def __init__(
         self,
         enable_astgrep: bool = None,
+        enable_semgrep: bool = None,
         enable_linters: bool = True
     ):
         """
@@ -32,9 +34,11 @@ class StaticAnalysisAggregator:
 
         Args:
             enable_astgrep: Enable ast-grep scanning (defaults to config.ASTGREP_ENABLED)
+            enable_semgrep: Enable Semgrep scanning (defaults to config.SEMGREP_ENABLED)
             enable_linters: Enable traditional linters
         """
         self.enable_astgrep = enable_astgrep if enable_astgrep is not None else config.ASTGREP_ENABLED
+        self.enable_semgrep = enable_semgrep if enable_semgrep is not None else config.get_env_bool("SEMGREP_ENABLED", False)
         self.enable_linters = enable_linters
 
         # Initialize ast-grep scanner
@@ -52,6 +56,25 @@ class StaticAnalysisAggregator:
             except Exception as e:
                 logger.warning(f"Failed to initialize ast-grep scanner: {e}")
                 self.astgrep_scanner = None
+
+        # Initialize Semgrep scanner
+        self.semgrep_scanner = None
+        if self.enable_semgrep:
+            try:
+                # Get rulesets from config
+                rulesets_str = config.get_env_str("SEMGREP_RULESETS", "auto")
+                rulesets = [r.strip() for r in rulesets_str.split(",") if r.strip()]
+
+                self.semgrep_scanner = SemgrepScanner(
+                    rulesets=rulesets,
+                    timeout=config.get_env_int("SEMGREP_TIMEOUT", 60),
+                    max_findings_per_file=config.get_env_int("SEMGREP_MAX_FINDINGS_PER_FILE", 50),
+                    use_sandbox=config.get_env_bool("SEMGREP_USE_SANDBOX", False)
+                )
+                logger.info("Semgrep scanner initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Semgrep scanner: {e}")
+                self.semgrep_scanner = None
 
     def analyze(
         self,
@@ -124,6 +147,38 @@ class StaticAnalysisAggregator:
 
             except Exception as e:
                 logger.error(f"AST-Grep execution failed: {e}", exc_info=True)
+
+        # Run Semgrep security scanner
+        if self.enable_semgrep and self.semgrep_scanner:
+            try:
+                semgrep_result = self._run_semgrep(
+                    changed_files,
+                    project_root,
+                    language
+                )
+
+                if semgrep_result:
+                    # Extract security findings
+                    semgrep_findings = semgrep_result.get("findings", [])
+
+                    # Deduplicate findings (in case of overlap with ast-grep)
+                    existing_signatures = {
+                        f"{f.file}:{f.line}:{f.rule_id}" for f in security_findings
+                    }
+
+                    for finding in semgrep_findings:
+                        signature = f"{finding.file}:{finding.line}:{finding.rule_id}"
+                        if signature not in existing_signatures:
+                            security_findings.append(finding)
+                            existing_signatures.add(signature)
+
+                    # Update stats
+                    stats["tools_run"].append("semgrep")
+                    stats["total_issues"] += len(semgrep_findings)
+                    stats["scan_time_ms"] += int(semgrep_result.get("scan_time_seconds", 0) * 1000)
+
+            except Exception as e:
+                logger.error(f"Semgrep execution failed: {e}", exc_info=True)
 
         # Generate security summary
         security_summary = self._generate_security_summary(security_findings)
@@ -323,6 +378,37 @@ class StaticAnalysisAggregator:
             logger.error(f"AST-Grep scan failed: {e}", exc_info=True)
             return None
 
+    def _run_semgrep(
+        self,
+        changed_files: List[str],
+        project_root: str,
+        language: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run Semgrep scanner.
+
+        Args:
+            changed_files: Files to scan
+            project_root: Project root directory
+            language: Optional language filter (not used - Semgrep auto-detects)
+
+        Returns:
+            Semgrep scan results
+        """
+        if not self.semgrep_scanner:
+            logger.debug("Semgrep scanner not available")
+            return None
+
+        try:
+            return self.semgrep_scanner.scan(
+                changed_files=changed_files,
+                project_root=project_root,
+                language=language
+            )
+        except Exception as e:
+            logger.error(f"Semgrep scan failed: {e}", exc_info=True)
+            return None
+
     def _generate_security_summary(
         self,
         findings: List[SecurityFinding]
@@ -380,6 +466,18 @@ class StaticAnalysisAggregator:
             tools_status["ast-grep"] = self.astgrep_scanner.check_installation()
         else:
             tools_status["ast-grep"] = False
+
+        # Check semgrep
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["semgrep", "--version"],
+                capture_output=True,
+                timeout=5
+            )
+            tools_status["semgrep"] = result.returncode == 0
+        except Exception:
+            tools_status["semgrep"] = False
 
         # Check flake8
         try:
