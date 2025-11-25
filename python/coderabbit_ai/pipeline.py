@@ -18,7 +18,7 @@ from .agents.verification_agent import VerificationAgentPool
 from .agents.requirements_validator_codeact import RequirementsValidatorCodeAct
 from .agents.business_logic_codeact import BusinessLogicAnalyzerCodeAct
 from .agents.metrics_codeact import MetricsGeneratorCodeAct
-from .analyzers import SecurityAggregator
+from .analyzers import SecurityAggregator, comment_formatter
 from .codeact import CodeSandbox
 
 logger = logging.getLogger(__name__)
@@ -604,12 +604,24 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                     if line_num == 0:
                         line_num = self._get_line_number_for_file(file_path)
 
+                    # Format message with professional CodeRabbit-style template
+                    formatted_message = comment_formatter.format_comment(
+                        message=finding.get("message", ""),
+                        severity=severity,
+                        suggested_fix=finding.get("suggestion", None),
+                        category=finding.get("category", "general"),
+                        file_path=file_path,
+                        cwe_id=finding.get("cwe_id"),
+                        owasp_category=finding.get("owasp_category"),
+                        references=finding.get("references", [])
+                    )
+
                     comment = ReviewComment(
                         id=finding_id,
                         file_path=file_path,
                         line_number=line_num,
                         comment_type=CommentType.ISSUE,
-                        message=finding.get("message", ""),
+                        message=formatted_message,
                         severity=severity,
                         suggested_fix=finding.get("suggestion", None),
                         confidence_score=min(1.0, consensus_score)
@@ -763,12 +775,20 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
                 # Get line number from diff mapping
                 line_num = self._get_line_number_for_file(file_path)
 
+                # Format message with professional template
+                formatted_message = comment_formatter.format_comment(
+                    message=message,
+                    severity=severity,
+                    category=specialization,
+                    file_path=file_path
+                )
+
                 comment = ReviewComment(
                     id=finding_id,
                     file_path=file_path,
                     line_number=line_num,
                     comment_type=CommentType.ISSUE,
-                    message=message,
+                    message=formatted_message,
                     severity=severity,
                     suggested_fix=None,
                     confidence_score=item_confidence
@@ -862,12 +882,21 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
         if severity not in ["low", "medium", "high", "critical"]:
             severity = "medium"
 
+        # Format message with professional template
+        formatted_message = comment_formatter.format_comment(
+            message=message,
+            severity=severity,
+            suggested_fix=suggestion,
+            category=category,
+            file_path=file_path
+        )
+
         return ReviewComment(
             id=comment_id,
             file_path=file_path,
             line_number=line_number,
             comment_type=CommentType.ISSUE,
-            message=message,
+            message=formatted_message,
             severity=severity,
             suggested_fix=suggestion,
             confidence_score=min(1.0, max(0.0, confidence))
