@@ -1166,3 +1166,138 @@ See full 200+ task roadmap from initial analysis. Will be executed after Phase 2
 - Test changes in staging environment
 - Decide on Phase 3 (Testing & Coverage) approach
 - Update AGENTS.md with any new signs discovered
+
+---
+
+## Phase 5: Configuration Management ✅
+
+**Status**: COMPLETE
+**Commits**: 7 commits pushed
+
+**Completed Tasks:**
+- ✅ Task 5.1: Create Rust config validator (crates/shared/src/config.rs)
+- ✅ Task 5.2: Create Python config validator (python/coderabbit_ai/config_validator.py)
+- ✅ Task 5.3: Enhance production.toml with full config
+- ✅ Task 5.4: Create staging.toml
+- ✅ Task 5.5: Create docs/CONFIGURATION.md (586 lines)
+- ✅ Task 5.6: Create docs/SECRET_MANAGEMENT.md (378 lines)
+- ✅ Task 5.7: Create docs/CONFIGURATION_MIGRATION.md (337 lines)
+- ✅ Task 5.8: Add feature flags system
+
+---
+
+## Phase 6: Documentation Completion ✅
+
+**Status**: COMPLETE
+**Commits**: 5 commits pushed
+
+**Completed Tasks:**
+- ✅ Task 6.1: Create CONTRIBUTING.md
+- ✅ Task 6.2: Create docs/API_DOCUMENTATION.md
+- ✅ Task 6.3: Update docs/ARCHITECTURE.md
+- ✅ Task 6.4: Enhance docs/DEPLOYMENT.md (789→1708 lines)
+- ✅ Task 6.5: Create docs/USER_GUIDE.md (291 lines)
+- ✅ Task 6.6: Create docs/TROUBLESHOOTING.md (486 lines)
+- ✅ Task 6.8: Update README.md with doc links
+
+---
+
+## Phase 7: Deployment & CI/CD ✅
+
+**Status**: COMPLETE
+**Commits**: 1 commit pushed
+
+**Completed Tasks:**
+- ✅ Task 7.1: Add config validation to CI (.github/workflows/ci.yml)
+- ✅ Task 7.2: Enhance Dockerfile with multi-target builds
+- ✅ Task 7.3: Create deploy-production.yml workflow
+- ✅ Task 7.4: Create K8s manifests (namespace, configmap, secrets, api-gateway)
+- ✅ Task 7.5: Create docker-compose.prod.yml
+
+---
+
+## Phase 8: Monitoring & Observability
+
+**Status**: IN PROGRESS
+**Priority**: HIGH - Production visibility
+
+---
+
+### 8.1 Metrics & Health Checks
+
+#### Task 8.1.1: Add Prometheus metrics endpoint to API Gateway ☐
+**File**: crates/api-gateway/src/handlers/metrics.rs
+**Issue**: No Prometheus metrics exposed
+**Verification**: `curl http://localhost:8080/metrics` returns metrics
+**Commit message**: `feat: add Prometheus metrics endpoint`
+
+Steps:
+1. Add prometheus dependency to Cargo.toml
+2. Create metrics handler
+3. Register common metrics (requests, latency, errors)
+4. Run cargo check
+5. Commit changes
+
+---
+
+#### Task 8.1.2: Add health/ready endpoints ☐
+**File**: crates/api-gateway/src/handlers/health.rs
+**Issue**: Need /health and /ready endpoints
+**Verification**: Endpoints return proper status
+**Commit message**: `feat: add health and readiness endpoints`
+
+Steps:
+1. Create health handler with service checks
+2. Create ready handler with dependency checks
+3. Add routes
+4. Commit changes
+
+---
+
+#### Task 8.1.3: Add OpenTelemetry tracing ☐
+**File**: crates/api-gateway/src/tracing.rs
+**Issue**: No distributed tracing
+**Verification**: Traces exported to OTLP endpoint
+**Commit message**: `feat: add OpenTelemetry tracing`
+
+Steps:
+1. Add opentelemetry dependencies
+2. Configure OTLP exporter
+3. Add span instrumentation
+4. Commit changes
+
+---
+
+### 8.2 Logging
+
+#### Task 8.2.1: Structured JSON logging ☐
+**File**: crates/shared/src/logging.rs
+**Issue**: Logs need structured format for aggregation
+**Verification**: Logs output as JSON
+**Commit message**: `feat: add structured JSON logging`
+
+Steps:
+1. Configure tracing-subscriber with JSON format
+2. Add request ID to all logs
+3. Commit changes
+
+---
+
+### 8.3 Alerting
+
+#### Task 8.3.1: Create alerting rules ☐
+**File**: k8s/alerting-rules.yaml
+**Issue**: No alerting configuration
+**Verification**: Rules valid YAML
+**Commit message**: `feat: add Prometheus alerting rules`
+
+Steps:
+1. Create alerting rules for:
+   - High error rate
+   - High latency
+   - Queue backlog
+   - Service down
+2. Commit changes
+
+---
+
