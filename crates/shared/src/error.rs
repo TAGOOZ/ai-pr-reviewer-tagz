@@ -32,6 +32,12 @@ pub enum CodeRabbitError {
     #[error("Configuration error: {0}")]
     ConfigError(String),
 
+    #[error("Configuration required field missing: {0}")]
+    Required(String),
+
+    #[error("Configuration parse error: {0}")]
+    ParseError(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
 
@@ -63,6 +69,27 @@ pub enum CodeRabbitError {
 }
 
 pub type Result<T> = std::result::Result<T, CodeRabbitError>;
+
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("Configuration required field missing: {0}")]
+    Required(String),
+
+    #[error("Configuration parse error: {0}")]
+    ParseError(String),
+
+    #[error("Configuration validation error: {0}")]
+    ValidationError(String),
+
+    #[error("Configuration IO error: {0}")]
+    IoError(String),
+}
+
+impl From<ConfigError> for CodeRabbitError {
+    fn from(err: ConfigError) -> Self {
+        CodeRabbitError::ConfigError(err.to_string())
+    }
+}
 
 // From implementations for common error types
 impl From<anyhow::Error> for CodeRabbitError {
