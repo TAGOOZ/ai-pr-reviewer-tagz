@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coderabbit-config
+  namespace: coderabbit
+data:
+  production.toml: |
+    # Loaded from config/production.toml
+    # Use: kubectl create configmap coderabbit-config --from-file=production.toml=config/production.toml
+    
+    [server]
+    host = "0.0.0.0"
+    port = 8080
+    workers = 8
+    
+    [database]
+    max_connections = 50
+    min_connections = 10
+    connection_timeout = 30
+    
+    [redis]
+    pool_size = 20
+    connection_timeout = 5
+    
+    [ai]
+    default_model = "gpt-4"
+    max_tokens = 8192
+    temperature = 0.3
+    
+    [auth]
+    token_expiration_hours = 24
+    skip_auth = false
+    
+    [feature_flags]
+    enable_cag = true
+    enable_deepwiki = true
+    enable_semgrep = true

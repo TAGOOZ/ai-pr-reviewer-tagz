@@ -53,6 +53,7 @@ RUN apt-get update && apt-get install -y \
     libpq5 \
     python3.11 \
     python3.11-distutils \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Rust binaries
@@ -63,6 +64,9 @@ COPY --from=python-builder /usr/local/lib/python3.11/site-packages /usr/local/li
 COPY --from=python-builder /usr/local/bin /usr/local/bin
 COPY --from=python-builder /app/python /app/python
 
+# Copy configuration files
+COPY config/ /app/config/
+
 # Create non-root user
 RUN useradd -r -s /bin/false coderabbit
 
@@ -70,13 +74,36 @@ RUN useradd -r -s /bin/false coderabbit
 RUN mkdir -p /app/data /app/logs \
     && chown -R coderabbit:coderabbit /app
 
+# Environment variables
+ENV CODERABBIT_ENV=production
+ENV RUST_LOG=info,coderabbit=debug
+
 USER coderabbit
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/v1/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 EXPOSE 8080
 
 # Default command (can be overridden)
 CMD ["coderabbit-api-gateway"]
+
+# ============================================
+# API Gateway target
+# ============================================
+FROM runtime as api-gateway
+
+ENV CODERABBIT_ENV=production
+CMD ["coderabbit-api-gateway"]
+
+# ============================================
+# AI Pipeline target
+# ============================================
+FROM runtime as ai-pipeline
+
+ENV CODERABBIT_ENV=production
+EXPOSE 8081
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+CMD ["python3", "-m", "coderabbit_ai.server"]

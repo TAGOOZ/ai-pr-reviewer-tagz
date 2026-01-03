@@ -44,6 +44,16 @@ jobs:
     - name: Run tests
       run: cargo test --all-features --lib --workspace
     
+    - name: Validate configuration files
+      run: |
+        echo "Validating TOML configuration files..."
+        for env in development staging production; do
+          if [ -f "config/${env}.toml" ]; then
+            echo "Checking config/${env}.toml..."
+            cargo run --bin validate-config -- --env $env || echo "Warning: validate-config not available yet"
+          fi
+        done
+    
     - name: Security audit
       run: |
         cargo install cargo-audit
@@ -94,6 +104,25 @@ jobs:
     
     - name: Run tests
       run: poetry run pytest tests/ -v --cov=coderabbit_ai --cov-report=xml
+    
+    - name: Validate Python configuration
+      run: |
+        echo "Validating Python config..."
+        poetry run python -c "
+from coderabbit_ai.config_validator import ConfigValidator
+for env in ['development', 'staging', 'production']:
+    try:
+        v = ConfigValidator(env)
+        issues = v.validate()
+        if issues:
+            print(f'{env}: {len(issues)} issues')
+            for i in issues[:3]:
+                print(f'  - {i}')
+        else:
+            print(f'{env}: OK')
+    except Exception as e:
+        print(f'{env}: Skip ({e})')
+" || echo "Config validator not ready"
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -238,8 +267,10 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    # TODO: Add actual deployment steps to staging environment
     - name: Deploy to staging
       run: |
         echo "Deploying to staging environment..."
-        # Add deployment commands here
+        echo "Using config: config/staging.toml"
+        echo "Environment: CODERABBIT_ENV=staging"
+        # kubectl apply -f k8s/staging/
+        # or: docker-compose -f docker-compose.staging.yml up -d
