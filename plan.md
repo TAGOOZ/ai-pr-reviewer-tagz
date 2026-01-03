@@ -1240,17 +1240,19 @@ Steps:
 
 ---
 
-#### Task 8.1.2: Add health/ready endpoints ☐
+#### Task 8.1.2: Add health/ready endpoints ✅
 **File**: crates/api-gateway/src/handlers/health.rs
 **Issue**: Need /health and /ready endpoints
 **Verification**: Endpoints return proper status
-**Commit message**: `feat: add health and readiness endpoints`
+**Commit message**: Already implemented
 
 Steps:
-1. Create health handler with service checks
-2. Create ready handler with dependency checks
-3. Add routes
-4. Commit changes
+1. Create health handler with service checks ✅
+2. Create ready handler with dependency checks ✅
+3. Add routes ✅
+4. Commit changes ✅
+
+**Note**: Health and readiness endpoints already implemented in health.rs with database, Redis, and Python service checks.
 
 ---
 
