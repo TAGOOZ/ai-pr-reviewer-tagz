@@ -30,6 +30,7 @@ pub fn test_config() -> AppConfig {
             openai_api_key: std::env::var("OPENAI_API_KEY")
                 .unwrap_or_else(|_| "test_key".to_string()),
             anthropic_api_key: "".to_string(),
+            cohere_api_key: None,
             default_model: "gpt-3.5-turbo".to_string(),
             max_tokens: 4000,
             temperature: 0.7,
@@ -42,6 +43,8 @@ pub fn test_config() -> AppConfig {
         },
         git_providers: coderabbit_shared::config::GitProviderConfig {
             github_token: std::env::var("GITHUB_TOKEN").ok(),
+            github_app_id: None,
+            github_webhook_secret: None,
             gitlab_token: std::env::var("GITLAB_TOKEN").ok(),
             azure_devops_pat: std::env::var("AZURE_DEVOPS_PAT").ok(),
             azure_devops_org: std::env::var("AZURE_DEVOPS_ORG").ok(),
@@ -58,6 +61,9 @@ pub fn test_config() -> AppConfig {
             embedding_model: "sentence-transformers/all-MiniLM-L6-v2".to_string(),
             embedding_dimension: 384,
         },
+        security: coderabbit_shared::config::SecurityConfig::default(),
+        sandbox: coderabbit_shared::config::SandboxConfig::default(),
+        feature_flags: coderabbit_shared::config::FeatureFlags::default(),
         environment: "test".to_string(),
         log_level: "debug".to_string(),
     }
