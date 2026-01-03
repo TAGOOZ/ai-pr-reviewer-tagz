@@ -196,11 +196,16 @@ async def process_review(request: ReviewRequest, background_tasks: BackgroundTas
 @app.post("/bridge/analysis_file_batch")
 async def bridge_analysis_file_batch(payload: Dict[str, Any] = Body(...)):
     """Consume a batch of files via shared memory path and parse MessagePack-encoded FileChange[]"""
+    MAX_MSGPACK_SIZE = 10 * 1024 * 1024  # 10MB
     try:
         shm_path = payload.get("shared_memory_path")
         byte_len = int(payload.get("byte_len", 0))
         if not shm_path or byte_len <= 0:
             raise HTTPException(status_code=400, detail="Missing shared_memory_path or byte_len")
+
+        # Validate msgpack payload size
+        if byte_len > MAX_MSGPACK_SIZE:
+            raise HTTPException(status_code=400, detail=f"MessagePack payload too large: {byte_len} bytes (max: {MAX_MSGPACK_SIZE})")
 
         # Validate shm_path to prevent directory traversal
         shm_path_resolved = pathlib.Path(shm_path).resolve()
