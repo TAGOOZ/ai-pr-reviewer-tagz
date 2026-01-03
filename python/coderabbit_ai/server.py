@@ -1,6 +1,7 @@
 """FastAPI server for CodeRabbit AI Pipeline."""
 
 import os
+import pathlib
 import re
 import asyncio
 import json
@@ -200,7 +201,12 @@ async def bridge_analysis_file_batch(payload: Dict[str, Any] = Body(...)):
         if not shm_path or byte_len <= 0:
             raise HTTPException(status_code=400, detail="Missing shared_memory_path or byte_len")
 
-        with open(shm_path, "rb") as f:
+        # Validate shm_path to prevent directory traversal
+        shm_path_resolved = pathlib.Path(shm_path).resolve()
+        if not str(shm_path_resolved).startswith("/tmp/coderabbit_shm/"):
+            raise HTTPException(status_code=400, detail="Invalid shm_path: must be in /tmp/coderabbit_shm/")
+
+        with open(shm_path_resolved, "rb") as f:
             raw = f.read(byte_len)
 
         files_changed = msgpack.unpackb(raw, raw=False)
@@ -261,9 +267,9 @@ async def bridge_analysis_file_batch(payload: Dict[str, Any] = Body(...)):
             # Serialize response back to msgpack
             response_data = review_response.model_dump() if hasattr(review_response, "model_dump") else review_response.dict()
             packed_response = msgpack.packb(response_data, use_bin_type=True)
-            
+
             # Write response to shared memory
-            response_path = shm_path + ".response"
+            response_path = str(shm_path_resolved) + ".response"
             with open(response_path, "wb") as f:
                 f.write(packed_response)
             
