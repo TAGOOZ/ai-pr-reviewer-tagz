@@ -568,7 +568,7 @@ Steps:
 
 ---
 
-#### Task 3.1.2: Add tests for python/coderabbit_ai/dashboard.py ☐
+#### Task 3.1.2: Add tests for python/coderabbit_ai/dashboard.py ✅
 **Issue**: No tests for dashboard routes
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for dashboard.py`
