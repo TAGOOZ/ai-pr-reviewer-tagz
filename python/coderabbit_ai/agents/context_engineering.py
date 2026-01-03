@@ -1,7 +1,6 @@
 """Context Engineering Agent for comprehensive context gathering."""
 
 import dspy
-import ast
 import hashlib
 import time
 import logging

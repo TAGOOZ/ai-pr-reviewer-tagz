@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 import subprocess
 import tempfile
 import textwrap
