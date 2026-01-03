@@ -149,44 +149,93 @@ pre-commit run --all-files
 
 ## Configuration
 
-Configuration is managed through TOML files in the `config/` directory:
+See **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** for complete reference.
 
-- `development.toml`: Local development settings
-- `production.toml`: Production environment settings
+Config managed via TOML + environment variables:
 
-Environment variables can be used to override configuration values.
+```bash
+# Environment selection
+CODERABBIT_ENV=production  # or development, staging
+
+# Config files
+config/
+├── development.toml   # Local dev (default)
+├── staging.toml       # Staging env
+└── production.toml    # Production
+
+# Validate config
+cargo run --bin validate-config -- --env production
+```
+
+Key env vars (see [.env.example](.env.example)):
+- `DATABASE_URL` - PostgreSQL connection
+- `REDIS_URL` - Redis connection  
+- `JWT_SECRET` - Auth secret (32+ chars)
+- `OPENAI_API_KEY` - OpenAI API
+- `GITHUB_TOKEN` - GitHub integration
+
+**Docs:**
+- [CONFIGURATION.md](docs/CONFIGURATION.md) - All config options
+- [SECRET_MANAGEMENT.md](docs/SECRET_MANAGEMENT.md) - Secret storage/rotation
+- [CONFIGURATION_MIGRATION.md](docs/CONFIGURATION_MIGRATION.md) - Version migrations
 
 ## API Documentation
 
-### Health Check
+See **[docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)** for complete reference.
+
+Quick examples:
+
 ```bash
-curl http://localhost:8080/api/v1/health
+# Health check
+curl http://localhost:8080/health
+
+# Webhook endpoints
+POST /api/webhooks/github
+POST /api/webhooks/gitlab
+POST /api/webhooks/azure-devops
+
+# Review management
+GET /api/reviews/{id}
+POST /api/reviews/{id}/cancel
+GET /api/reviews/{id}/status
+
+# Full API docs
+curl http://localhost:8080/api/docs
 ```
-
-### Webhook Endpoints
-- `POST /api/v1/webhook/github` - GitHub webhook handler
-- `POST /api/v1/webhook/gitlab` - GitLab webhook handler  
-- `POST /api/v1/webhook/azure` - Azure DevOps webhook handler
-
-### Review Management
-- `GET /api/v1/review/{id}` - Get review status
-- `POST /api/v1/review/{id}/cancel` - Cancel review
 
 ## Deployment
 
-### Docker Deployment
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for production deployment.
+
+### Quick Deploy Options
+
+**Docker Compose (simple):**
 ```bash
-docker build -t coderabbit:latest .
-docker run -p 8080:8080 coderabbit:latest
+CODERABBIT_ENV=production docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Cloud Deployment
-The application is designed for deployment on Google Cloud Platform:
+**Kubernetes (scalable):**
+```bash
+kubectl create configmap coderabbit-config --from-file=config/production.toml
+kubectl create secret generic coderabbit-secrets --from-env-file=.env.production
+kubectl apply -f k8s/
+```
 
-- **Cloud Run**: Serverless container hosting
-- **Cloud Tasks**: Job queue management
-- **Cloud SQL**: PostgreSQL database
-- **Cloud Memorystore**: Redis cache
+**AWS ECS:**
+```bash
+# See docs/DEPLOYMENT.md for complete guide
+```
+
+Deployment checklist:
+- [ ] Config validated: `validate-config --env production`
+- [ ] Secrets in vault (not hardcoded)
+- [ ] Health checks working
+- [ ] TLS configured
+- [ ] Monitoring set up
+
+**Docs:**
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Complete deployment guide
+- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
 
 ## Performance Targets
 
@@ -201,13 +250,58 @@ Based on the requirements, the system targets:
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes and add tests
-4. Run quality checks: `pre-commit run --all-files`
-5. Commit your changes: `git commit -m 'Add amazing feature'`
-6. Push to the branch: `git push origin feature/amazing-feature`
-7. Open a Pull Request
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for complete guide.
+
+Quick start:
+1. Fork repo
+2. Create branch: `git checkout -b feature/name`
+3. Make changes + tests
+4. Quality checks: `pre-commit run --all-files`
+5. Commit: `git commit -m 'feat: description'`
+6. Push + PR
+
+**Commit format:** `type: description`
+- `feat`: New feature
+- `fix`: Bug fix
+- `security`: Security fix
+- `refactor`: Code cleanup
+- `docs`: Documentation
+- `test`: Tests
+
+**Before commit:**
+```bash
+# Rust
+cargo fmt --all
+cargo clippy --all-targets -- -D warnings
+cargo test --workspace
+
+# Python
+poetry run black python/
+poetry run isort python/
+poetry run pytest tests/
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for Ralph-Driven Development workflow.
+
+## Documentation
+
+**User Guides:**
+- [USER_GUIDE.md](docs/USER_GUIDE.md) - End-user guide
+- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
+
+**Technical Docs:**
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture
+- [CONFIGURATION.md](docs/CONFIGURATION.md) - Config reference
+- [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) - REST API
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Production deployment
+
+**Security:**
+- [SECRET_MANAGEMENT.md](docs/SECRET_MANAGEMENT.md) - Secret handling
+- [SECURITY_ARCHITECTURE.md](docs/SECURITY_ARCHITECTURE.md) - Security design
+
+**Development:**
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guide
+- [AGENTS.md](AGENTS.md) - Known patterns (Ralph's signs)
 
 ## Security
 
@@ -223,7 +317,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-For questions and support:
-- Create an issue in this repository
-- Check the [documentation](docs/)
-- Review the [troubleshooting guide](docs/troubleshooting.md)
+**Documentation:** [docs/](docs/)
+
+**Issues:** 
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- [GitHub Issues](https://github.com/your-org/coderabbit/issues)
+
+**Contact:**
+- Email: support@coderabbit.ai
+- Docs: https://docs.coderabbit.ai
+- Status: https://status.coderabbit.ai
