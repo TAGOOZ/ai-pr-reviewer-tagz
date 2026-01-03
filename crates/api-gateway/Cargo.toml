@@ -7,6 +7,7 @@ edition = "2021"
 coderabbit-shared = { path = "../shared" }
 coderabbit-orchestrator = { path = "../orchestrator" }
 coderabbit-security = { path = "../security" }
+coderabbit-cache-layer = { path = "../cache-layer" }
 
 # Database
 sqlx = { workspace = true }
