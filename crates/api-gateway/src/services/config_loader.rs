@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_config_loader_creation() {
-        let loader = ConfigLoader::new(Some("test_token".to_string()));
+        let _loader = ConfigLoader::new(Some("test_token".to_string()));
         // Should not panic
     }
 

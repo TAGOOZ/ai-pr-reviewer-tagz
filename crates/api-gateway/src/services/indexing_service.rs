@@ -294,6 +294,7 @@ mod tests {
         let service = IndexingService::new(
             Arc::new(RwLock::new(orchestrator)),
             "test".to_string(),
+            None,
         );
 
         assert_eq!(service.detect_language("main.rs"), "rust");
