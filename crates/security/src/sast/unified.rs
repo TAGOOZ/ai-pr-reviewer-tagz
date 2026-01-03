@@ -8,7 +8,6 @@ use super::trivy::TrivyScanner;
 /// in parallel and aggregating their results.
 use super::*;
 use std::path::Path;
-use std::sync::Arc;
 
 /// Unified scanner result containing findings from all tools
 #[derive(Debug, Serialize, Deserialize)]

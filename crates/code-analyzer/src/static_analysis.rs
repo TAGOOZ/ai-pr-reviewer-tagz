@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use tokio::process::Command as AsyncCommand;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StaticAnalyzer {
