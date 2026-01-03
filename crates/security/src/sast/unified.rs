@@ -123,8 +123,8 @@ impl UnifiedScanner {
 
         for scanner in &self.scanners {
             let scanner_clone = scanner.tool();
-            let path_clone = path.to_path_buf();
-            let config_clone = config.clone();
+            let _path_clone = path.to_path_buf();
+            let _config_clone = config.clone();
 
             // Check if tool is enabled in config
             if !config.enabled_tools.contains(&scanner_clone) {
