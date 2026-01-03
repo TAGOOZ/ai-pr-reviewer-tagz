@@ -162,7 +162,10 @@ class CodeSandbox:
                     "error": f"Execution timed out after {self.timeout} seconds",
                     "timeout": self.timeout,
                 }
-            except Exception as e:
+            except TimeoutError:
+                logger.error(f"Execution timed out after {self.timeout} seconds")
+                return {"error": f"Execution timed out after {self.timeout} seconds", "timeout": self.timeout}
+            except (OSError, IOError) as e:
                 logger.error(f"Sandbox execution failed: {e}")
                 return {"error": f"Sandbox execution failed: {str(e)}"}
 
