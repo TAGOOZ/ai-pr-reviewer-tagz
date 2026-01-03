@@ -330,7 +330,7 @@ elif language in ["javascript", "typescript"]:
 # Run test command
 test_command = context["test_command"]
 test_result = subprocess.run(
-    test_command.split(),
+    shlex.split(test_command),
     capture_output=True,
     text=True,
     timeout=240
