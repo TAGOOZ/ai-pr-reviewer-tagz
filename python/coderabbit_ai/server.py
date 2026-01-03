@@ -1,6 +1,7 @@
 """FastAPI server for CodeRabbit AI Pipeline."""
 
 import os
+import re
 import asyncio
 import json
 from datetime import datetime
@@ -35,6 +36,9 @@ def _get_store_dir() -> str:
 
 def _save_to_file(review_id: str, payload: Dict[str, Any]) -> str:
     """Persist review result to a JSON file and update a simple index."""
+    # Validate review_id to prevent path traversal
+    if not re.match(r'^[a-zA-Z0-9\-_]+$', review_id):
+        raise ValueError("Invalid review_id: contains unsafe characters")
     store = _get_store_dir()
     path = os.path.join(store, f"{review_id}.json")
     with open(path, "w", encoding="utf-8") as f:
