@@ -1,0 +1,170 @@
+# Prometheus Alerting Rules for CodeRabbit
+# Deploy with: kubectl apply -f k8s/alerting-rules.yaml
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: coderabbit-alerts
+  namespace: coderabbit
+  labels:
+    app: coderabbit
+    prometheus: main
+spec:
+  groups:
+    - name: coderabbit.availability
+      interval: 30s
+      rules:
+        # Service down
+        - alert: CodeRabbitAPIDown
+          expr: up{job="api-gateway"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CodeRabbit API Gateway is down"
+            description: "API Gateway has been unreachable for more than 1 minute"
+            runbook_url: "https://docs.coderabbit.ai/runbooks/api-down"
+
+        - alert: CodeRabbitAIPipelineDown
+          expr: up{job="ai-pipeline"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CodeRabbit AI Pipeline is down"
+            description: "AI Pipeline has been unreachable for more than 1 minute"
+
+        # Readiness check failing
+        - alert: CodeRabbitNotReady
+          expr: coderabbit_ready == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CodeRabbit service not ready"
+            description: "One or more dependencies are unhealthy"
+
+    - name: coderabbit.errors
+      interval: 30s
+      rules:
+        # High error rate
+        - alert: CodeRabbitHighErrorRate
+          expr: |
+            (
+              rate(coderabbit_requests_error_total[5m]) /
+              rate(coderabbit_requests_total[5m])
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High error rate detected"
+            description: "Error rate is {{ $value | humanizePercentage }} over 5 minutes"
+
+        # Review failures
+        - alert: CodeRabbitReviewFailures
+          expr: |
+            (
+              rate(coderabbit_reviews_failed_total[10m]) /
+              rate(coderabbit_reviews_total[10m])
+            ) > 0.10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High review failure rate"
+            description: "{{ $value | humanizePercentage }} of reviews are failing"
+
+    - name: coderabbit.performance
+      interval: 30s
+      rules:
+        # High latency
+        - alert: CodeRabbitHighLatency
+          expr: |
+            histogram_quantile(0.99,
+              rate(coderabbit_request_duration_seconds_bucket[5m])
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High API latency detected"
+            description: "p99 latency is {{ $value }}s (threshold: 2s)"
+
+        # Very high latency
+        - alert: CodeRabbitCriticalLatency
+          expr: |
+            histogram_quantile(0.99,
+              rate(coderabbit_request_duration_seconds_bucket[5m])
+            ) > 10
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical API latency"
+            description: "p99 latency is {{ $value }}s - immediate action required"
+
+    - name: coderabbit.resources
+      interval: 60s
+      rules:
+        # Low cache hit rate
+        - alert: CodeRabbitLowCacheHitRate
+          expr: |
+            (
+              rate(coderabbit_cache_hits_total[10m]) /
+              (rate(coderabbit_cache_hits_total[10m]) + rate(coderabbit_cache_misses_total[10m]))
+            ) < 0.5
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low cache hit rate"
+            description: "Cache hit rate is {{ $value | humanizePercentage }}"
+
+        # High memory usage
+        - alert: CodeRabbitHighMemory
+          expr: |
+            container_memory_usage_bytes{container="api-gateway"} /
+            container_spec_memory_limit_bytes{container="api-gateway"} > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage"
+            description: "Memory usage is at {{ $value | humanizePercentage }}"
+
+        # High CPU usage
+        - alert: CodeRabbitHighCPU
+          expr: |
+            rate(container_cpu_usage_seconds_total{container="api-gateway"}[5m]) > 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage"
+            description: "CPU usage is at {{ $value | humanizePercentage }}"
+
+    - name: coderabbit.queue
+      interval: 30s
+      rules:
+        # Queue backlog
+        - alert: CodeRabbitQueueBacklog
+          expr: coderabbit_queue_depth > 100
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Review queue backlog"
+            description: "{{ $value }} reviews pending in queue"
+
+        # Queue stalled
+        - alert: CodeRabbitQueueStalled
+          expr: |
+            increase(coderabbit_reviews_completed_total[10m]) == 0
+            and coderabbit_queue_depth > 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Review queue stalled"
+            description: "No reviews completed in 10 minutes with pending queue"
