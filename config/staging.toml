@@ -1,0 +1,89 @@
+# CodeRabbit Staging Configuration
+# 
+# This configuration is optimized for staging deployments.
+# It sits between development and production in terms of settings.
+#
+# Usage:
+#   cargo run --config config/staging.toml
+#
+# Environment variables (highest priority):
+#   - Secrets: OPENAI_API_KEY, JWT_SECRET, GITHUB_TOKEN
+#   - Overrides: Any environment variable will override these defaults
+
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+
+[database]
+# Use PostgreSQL (like production) but with staging-specific DB
+url = "${DATABASE_URL:postgresql://coderabbit:${DB_PASSWORD}@staging-db:5432/coderabbit_staging}"
+max_connections = 20
+min_connections = 5
+connection_timeout = 30
+
+[redis]
+# Staging Redis with authentication
+url = "${REDIS_URL:redis://:${REDIS_PASSWORD}@staging-redis:6379/0}"
+pool_size = 15
+connection_timeout = 10
+
+[ai]
+# Staging AI configuration
+openai_api_key = "${OPENAI_API_KEY}"
+anthropic_api_key = "${ANTHROPIC_API_KEY:}"
+cohere_api_key = "${COHERE_API_KEY:}"
+
+# Use cost-effective models for staging
+default_model = "gpt-3.5-turbo"
+max_tokens = 4000
+temperature = 0.7
+
+[auth]
+# JWT settings for staging
+jwt_secret = "${JWT_SECRET}"  # MUST be at least 32 characters
+token_expiration_hours = 8           # Shorter than production for testing
+refresh_token_expiration_days = 7    # Shorter than production
+skip_auth = false
+
+[python_service]
+host = "localhost"
+port = 8000
+workers = 2
+
+[vector_db]
+# Staging vector database
+lancedb_path = "./data/staging_lancedb"
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+embedding_dimension = 384
+
+[security]
+# Staging security settings
+enable_cors = true
+# Staging domain(s)
+allowed_origins = "${ALLOWED_ORIGINS:http://localhost:3000,https://staging.coderabbit.ai}"
+rate_limit_requests_per_minute = 100
+enable_secret_scanning = true
+
+[sandbox]
+# Staging sandbox limits (more generous than production)
+execution_timeout = 60
+max_memory_mb = 1024
+max_cpus = 2.0
+max_processes = 100
+docker_image = "coderabbit-sandbox:latest"
+max_output_size_bytes = 5242880  # 5MB
+
+[feature_flags]
+# Staging feature flags (most enabled for testing)
+enable_security_scanning = true
+enable_ai_review = true
+enable_vector_search = true
+enable_metrics = true
+enable_pr_test_runner = true  # Enable for testing in staging
+enable_deepwiki_integration = true
+enable_devin_integration = false
+
+[general]
+environment = "staging"
+log_level = "debug"
