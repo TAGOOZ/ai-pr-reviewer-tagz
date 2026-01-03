@@ -1,26 +1,23 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use crate::clone_decision::CloneDecision;
+use crate::error::{CodeRabbitError, Result};
 use chrono::{DateTime, Utc};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use validator::Validate;
-use regex::Regex;
 use std::sync::LazyLock;
-use crate::error::{CodeRabbitError, Result};
-use crate::clone_decision::CloneDecision;
+use uuid::Uuid;
+use validator::Validate;
 
 // Validation regex patterns
-static REPO_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[a-zA-Z0-9._-]+$").unwrap()
-});
+static REPO_NAME_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._-]+$").unwrap());
 
-static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[a-zA-Z0-9._-]+$").unwrap()
-});
+static USERNAME_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._-]+$").unwrap());
 
-static BRANCH_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[a-zA-Z0-9._/-]+$").unwrap()
-});
+static BRANCH_NAME_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._/-]+$").unwrap());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Platform {
@@ -61,10 +58,11 @@ impl Repository {
             clone_url,
             default_branch,
         };
-        
-        repo.validate()
-            .map_err(|e| CodeRabbitError::ConfigError(format!("Repository validation failed: {}", e)))?;
-        
+
+        repo.validate().map_err(|e| {
+            CodeRabbitError::ConfigError(format!("Repository validation failed: {}", e))
+        })?;
+
         Ok(repo)
     }
 }
@@ -80,12 +78,20 @@ pub struct User {
 }
 
 impl User {
-    pub fn validate_and_create(id: String, username: String, email: Option<String>) -> Result<Self> {
-        let user = User { id, username, email };
-        
+    pub fn validate_and_create(
+        id: String,
+        username: String,
+        email: Option<String>,
+    ) -> Result<Self> {
+        let user = User {
+            id,
+            username,
+            email,
+        };
+
         user.validate()
             .map_err(|e| CodeRabbitError::ConfigError(format!("User validation failed: {}", e)))?;
-        
+
         Ok(user)
     }
 }
@@ -125,10 +131,11 @@ impl FileChange {
             diff,
             language,
         };
-        
-        file_change.validate()
-            .map_err(|e| CodeRabbitError::ConfigError(format!("FileChange validation failed: {}", e)))?;
-        
+
+        file_change.validate().map_err(|e| {
+            CodeRabbitError::ConfigError(format!("FileChange validation failed: {}", e))
+        })?;
+
         Ok(file_change)
     }
 }
@@ -174,10 +181,11 @@ impl PullRequest {
             head_branch,
             files_changed,
         };
-        
-        pr.validate()
-            .map_err(|e| CodeRabbitError::ConfigError(format!("PullRequest validation failed: {}", e)))?;
-        
+
+        pr.validate().map_err(|e| {
+            CodeRabbitError::ConfigError(format!("PullRequest validation failed: {}", e))
+        })?;
+
         Ok(pr)
     }
 }
@@ -236,10 +244,11 @@ impl ReviewComment {
             suggested_fix,
             confidence_score,
         };
-        
-        comment.validate()
-            .map_err(|e| CodeRabbitError::ConfigError(format!("ReviewComment validation failed: {}", e)))?;
-        
+
+        comment.validate().map_err(|e| {
+            CodeRabbitError::ConfigError(format!("ReviewComment validation failed: {}", e))
+        })?;
+
         Ok(comment)
     }
 }
@@ -300,10 +309,11 @@ impl OrganizationConfig {
             ai_settings,
             integrations,
         };
-        
-        config.validate()
-            .map_err(|e| CodeRabbitError::ConfigError(format!("OrganizationConfig validation failed: {}", e)))?;
-        
+
+        config.validate().map_err(|e| {
+            CodeRabbitError::ConfigError(format!("OrganizationConfig validation failed: {}", e))
+        })?;
+
         Ok(config)
     }
 }
@@ -445,10 +455,11 @@ impl ReviewJob {
             created_at: now,
             updated_at: now,
         };
-        
-        job.validate()
-            .map_err(|e| CodeRabbitError::ConfigError(format!("ReviewJob validation failed: {}", e)))?;
-        
+
+        job.validate().map_err(|e| {
+            CodeRabbitError::ConfigError(format!("ReviewJob validation failed: {}", e))
+        })?;
+
         Ok(job)
     }
 }

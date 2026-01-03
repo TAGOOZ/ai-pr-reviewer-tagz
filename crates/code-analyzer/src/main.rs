@@ -1,5 +1,5 @@
 use coderabbit_code_analyzer::CodeAnalyzer;
-use coderabbit_shared::{FileChange, ChangeType};
+use coderabbit_shared::{ChangeType, FileChange};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -29,14 +29,16 @@ fn main() {
     let x = 42;
     println!("The answer is {}", x);
 }
-"#.to_string(),
+"#
+            .to_string(),
             diff: r#"
 +fn main() {
 +    println!("Hello, world!");
 +    let x = 42;
 +    println!("The answer is {}", x);
 +}
-"#.to_string(),
+"#
+            .to_string(),
             language: "rust".to_string(),
         },
         FileChange {
@@ -56,7 +58,8 @@ mod tests {
         assert_eq!(add(2, 2), 4);
     }
 }
-"#.to_string(),
+"#
+            .to_string(),
             diff: r#"
 +pub fn add(a: i32, b: i32) -> i32 {
 +    a + b
@@ -71,7 +74,8 @@ mod tests {
 +        assert_eq!(add(2, 2), 4);
 +    }
 +}
-"#.to_string(),
+"#
+            .to_string(),
             language: "rust".to_string(),
         },
     ];

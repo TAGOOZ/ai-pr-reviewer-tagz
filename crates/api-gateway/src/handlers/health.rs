@@ -1,4 +1,4 @@
-use axum::{Json, response::Json as ResponseJson};
+use axum::{response::Json as ResponseJson, Json};
 use serde_json::{json, Value};
 
 pub async fn health_check() -> ResponseJson<Value> {

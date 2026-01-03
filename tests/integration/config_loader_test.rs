@@ -29,8 +29,8 @@ async fn test_cache_operations() {
 #[tokio::test]
 #[ignore] // Requires GitHub token
 async fn test_load_config_from_real_repo() {
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let loader = ConfigLoader::new(Some(github_token));
 
@@ -40,7 +40,10 @@ async fn test_load_config_from_real_repo() {
     let repo = "rust";
     let ref_name = "master";
 
-    println!("📋 Loading config from {}/{} (ref: {})", owner, repo, ref_name);
+    println!(
+        "📋 Loading config from {}/{} (ref: {})",
+        owner, repo, ref_name
+    );
 
     let config = loader.load_config(owner, repo, ref_name).await;
 
@@ -65,8 +68,8 @@ async fn test_load_config_from_real_repo() {
 #[tokio::test]
 #[ignore]
 async fn test_config_cache_hit() {
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let loader = ConfigLoader::new(Some(github_token));
 
@@ -135,7 +138,10 @@ async fn test_parse_example_config() {
             println!("   Ignored directories: {:?}", cfg.ignore.directories);
             println!("   Enabled rules: {:?}", cfg.rules.enabled);
             println!("   Disabled rules: {:?}", cfg.rules.disabled);
-            println!("   Languages: {:?}", cfg.languages.keys().collect::<Vec<_>>());
+            println!(
+                "   Languages: {:?}",
+                cfg.languages.keys().collect::<Vec<_>>()
+            );
 
             // Verify specific values from example
             assert!(cfg.reviews.auto_review);
@@ -169,8 +175,8 @@ async fn test_parse_example_config() {
 #[tokio::test]
 #[ignore]
 async fn test_config_invalidation() {
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let loader = ConfigLoader::new(Some(github_token));
 

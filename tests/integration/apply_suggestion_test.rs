@@ -1,14 +1,14 @@
+use axum::Json;
 /// Integration test for applying code suggestions via GitHub commits
 use coderabbit_api_gateway::handlers::pr_features;
 use coderabbit_shared::models::ApplySuggestionRequest;
-use axum::Json;
 
 #[tokio::test]
 #[ignore] // Run with: cargo test --test apply_suggestion_test -- --ignored
 async fn test_apply_suggestion_with_real_github() {
     // Setup environment
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     std::env::set_var("GITHUB_TOKEN", github_token);
 
@@ -16,14 +16,17 @@ async fn test_apply_suggestion_with_real_github() {
     // Note: This test requires a real PR where you have write access
     let request = ApplySuggestionRequest {
         repository_owner: "YOUR_GITHUB_USERNAME".to_string(), // Update this
-        repository_name: "YOUR_TEST_REPO".to_string(),         // Update this
-        pr_number: 1,                                          // Update this
+        repository_name: "YOUR_TEST_REPO".to_string(),        // Update this
+        pr_number: 1,                                         // Update this
         suggestion_id: "test-suggestion-1".to_string(),
         commit_message: Some("Apply CodeRabbit suggestion".to_string()),
     };
 
     println!("🔧 Testing apply_suggestion endpoint");
-    println!("   Repository: {}/{}", request.repository_owner, request.repository_name);
+    println!(
+        "   Repository: {}/{}",
+        request.repository_owner, request.repository_name
+    );
     println!("   PR Number: {}", request.pr_number);
 
     // Call the handler
@@ -62,8 +65,8 @@ async fn test_apply_suggestion_fetches_pr_files() {
     // This test verifies the file fetching logic works correctly
     use coderabbit_api_gateway::helpers::git_client::GitHubClient;
 
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let client = GitHubClient::new(Some(github_token));
 
@@ -72,14 +75,18 @@ async fn test_apply_suggestion_fetches_pr_files() {
     let repo = "rust";
     let pr_number = 114183;
 
-    println!("🔍 Fetching PR files from {}/{} PR #{}", owner, repo, pr_number);
+    println!(
+        "🔍 Fetching PR files from {}/{} PR #{}",
+        owner, repo, pr_number
+    );
 
     match client.fetch_pr_files(owner, repo, pr_number).await {
         Ok(files) => {
             println!("✅ Successfully fetched {} files", files.len());
 
             for (i, file) in files.iter().take(5).enumerate() {
-                println!("   File {}: {} (language: {})",
+                println!(
+                    "   File {}: {} (language: {})",
                     i + 1,
                     file.path,
                     file.language
@@ -101,8 +108,8 @@ async fn test_fetch_file_from_ref() {
     // Test fetching a specific file from a branch
     use coderabbit_api_gateway::helpers::git_client::GitHubClient;
 
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let client = GitHubClient::new(Some(github_token));
 
@@ -114,7 +121,10 @@ async fn test_fetch_file_from_ref() {
 
     println!("📄 Fetching file {} from {}:{}", file_path, repo, ref_name);
 
-    match client.fetch_file_from_ref(owner, repo, file_path, ref_name).await {
+    match client
+        .fetch_file_from_ref(owner, repo, file_path, ref_name)
+        .await
+    {
         Ok(file_response) => {
             println!("✅ Successfully fetched file");
             println!("   SHA: {}", file_response.sha);
@@ -127,7 +137,8 @@ async fn test_fetch_file_from_ref() {
             {
                 Ok(decoded) => {
                     let content = String::from_utf8_lossy(&decoded);
-                    println!("   Content preview: {}",
+                    println!(
+                        "   Content preview: {}",
                         content.lines().next().unwrap_or("(empty)")
                     );
                     println!("   Content length: {} bytes", content.len());
@@ -156,8 +167,8 @@ async fn test_get_pr_details() {
     // Test fetching PR metadata
     use coderabbit_api_gateway::helpers::git_client::GitHubClient;
 
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let client = GitHubClient::new(Some(github_token));
 
@@ -165,7 +176,10 @@ async fn test_get_pr_details() {
     let repo = "rust";
     let pr_number = 114183;
 
-    println!("🔍 Fetching PR details for {}/{} PR #{}", owner, repo, pr_number);
+    println!(
+        "🔍 Fetching PR details for {}/{} PR #{}",
+        owner, repo, pr_number
+    );
 
     match client.get_pr_details(owner, repo, pr_number).await {
         Ok(pr_details) => {
@@ -192,8 +206,8 @@ async fn test_suggestion_generation_logic() {
     // Test the suggestion generation logic for different languages
     use coderabbit_api_gateway::helpers::git_client::GitHubClient;
 
-    let github_token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let github_token =
+        std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let client = GitHubClient::new(Some(github_token));
 
@@ -215,10 +229,7 @@ async fn test_suggestion_generation_logic() {
                         for line in file.content.lines() {
                             if line.contains(".unwrap()") {
                                 suggestions_found += 1;
-                                println!("   Found .unwrap() in {}: {}",
-                                    file.path,
-                                    line.trim()
-                                );
+                                println!("   Found .unwrap() in {}: {}", file.path, line.trim());
                             }
                         }
                     }
@@ -226,10 +237,7 @@ async fn test_suggestion_generation_logic() {
                         for line in file.content.lines() {
                             if line.contains("except:") {
                                 suggestions_found += 1;
-                                println!("   Found bare except in {}: {}",
-                                    file.path,
-                                    line.trim()
-                                );
+                                println!("   Found bare except in {}: {}", file.path, line.trim());
                             }
                         }
                     }
@@ -237,7 +245,8 @@ async fn test_suggestion_generation_logic() {
                         for line in file.content.lines() {
                             if line.contains("var ") {
                                 suggestions_found += 1;
-                                println!("   Found var declaration in {}: {}",
+                                println!(
+                                    "   Found var declaration in {}: {}",
                                     file.path,
                                     line.trim()
                                 );
@@ -248,7 +257,8 @@ async fn test_suggestion_generation_logic() {
                 }
             }
 
-            println!("✅ Found {} potential suggestions across {} files",
+            println!(
+                "✅ Found {} potential suggestions across {} files",
                 suggestions_found,
                 files.len()
             );

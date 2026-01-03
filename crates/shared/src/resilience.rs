@@ -1,11 +1,10 @@
 ///! Resilience patterns: Circuit Breaker, Retry, Timeout, Bulkhead
 ///! Production-grade error handling and fallback mechanisms
-
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Circuit Breaker states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,8 +36,8 @@ pub struct CircuitBreakerConfig {
 impl Default for CircuitBreakerConfig {
     fn default() -> Self {
         Self {
-            failure_threshold: 5,      // Open after 5 failures
-            success_threshold: 2,       // Close after 2 successes
+            failure_threshold: 5, // Open after 5 failures
+            success_threshold: 2, // Close after 2 successes
             timeout_duration: Duration::from_secs(30),
             reset_timeout: Duration::from_secs(60),
         }
@@ -68,7 +67,10 @@ impl CircuitBreaker {
 
     fn set_state(&self, state: CircuitState) {
         self.state.store(state as usize, Ordering::Relaxed);
-        info!("[CircuitBreaker:{}] State changed to {:?}", self.name, state);
+        info!(
+            "[CircuitBreaker:{}] State changed to {:?}",
+            self.name, state
+        );
     }
 
     pub async fn call<F, Fut, T, E>(&self, f: F) -> Result<T, CircuitBreakerError<E>>
@@ -86,15 +88,24 @@ impl CircuitBreaker {
                 let now = Instant::now().elapsed().as_millis() as u64;
 
                 if now - last_failure > self.config.reset_timeout.as_millis() as u64 {
-                    info!("[CircuitBreaker:{}] Reset timeout passed, transitioning to HalfOpen", self.name);
+                    info!(
+                        "[CircuitBreaker:{}] Reset timeout passed, transitioning to HalfOpen",
+                        self.name
+                    );
                     self.set_state(CircuitState::HalfOpen);
                 } else {
-                    warn!("[CircuitBreaker:{}] Circuit is OPEN, rejecting request", self.name);
+                    warn!(
+                        "[CircuitBreaker:{}] Circuit is OPEN, rejecting request",
+                        self.name
+                    );
                     return Err(CircuitBreakerError::Open);
                 }
             }
             CircuitState::HalfOpen => {
-                info!("[CircuitBreaker:{}] In HalfOpen state, testing service", self.name);
+                info!(
+                    "[CircuitBreaker:{}] In HalfOpen state, testing service",
+                    self.name
+                );
             }
             CircuitState::Closed => {
                 // Normal operation
@@ -126,7 +137,10 @@ impl CircuitBreaker {
         match self.get_state() {
             CircuitState::HalfOpen => {
                 if successes >= self.config.success_threshold {
-                    info!("[CircuitBreaker:{}] Success threshold reached, closing circuit", self.name);
+                    info!(
+                        "[CircuitBreaker:{}] Success threshold reached, closing circuit",
+                        self.name
+                    );
                     self.set_state(CircuitState::Closed);
                     self.failure_count.store(0, Ordering::Relaxed);
                     self.success_count.store(0, Ordering::Relaxed);
@@ -150,13 +164,19 @@ impl CircuitBreaker {
         match self.get_state() {
             CircuitState::Closed => {
                 if failures >= self.config.failure_threshold {
-                    warn!("[CircuitBreaker:{}] Failure threshold reached, opening circuit", self.name);
+                    warn!(
+                        "[CircuitBreaker:{}] Failure threshold reached, opening circuit",
+                        self.name
+                    );
                     self.set_state(CircuitState::Open);
                     self.success_count.store(0, Ordering::Relaxed);
                 }
             }
             CircuitState::HalfOpen => {
-                warn!("[CircuitBreaker:{}] Failure in HalfOpen state, reopening circuit", self.name);
+                warn!(
+                    "[CircuitBreaker:{}] Failure in HalfOpen state, reopening circuit",
+                    self.name
+                );
                 self.set_state(CircuitState::Open);
                 self.success_count.store(0, Ordering::Relaxed);
             }
@@ -230,13 +250,17 @@ impl RetryPolicy {
                         return Err(err);
                     }
 
-                    warn!("Attempt {} failed: {:?}, retrying after {:?}", attempt, err, delay);
+                    warn!(
+                        "Attempt {} failed: {:?}, retrying after {:?}",
+                        attempt, err, delay
+                    );
 
                     tokio::time::sleep(delay).await;
 
                     // Exponential backoff
                     delay = Duration::from_millis(
-                        (delay.as_millis() as f64 * self.backoff_multiplier).min(self.max_delay.as_millis() as f64) as u64
+                        (delay.as_millis() as f64 * self.backoff_multiplier)
+                            .min(self.max_delay.as_millis() as f64) as u64,
                     );
                 }
             }
@@ -272,7 +296,10 @@ impl Bulkhead {
 
         if current >= max {
             self.current_concurrent.fetch_sub(1, Ordering::Relaxed);
-            warn!("[Bulkhead:{}] Capacity exceeded ({}/{}), rejecting request", self.name, current, max);
+            warn!(
+                "[Bulkhead:{}] Capacity exceeded ({}/{}), rejecting request",
+                self.name, current, max
+            );
             return Err(BulkheadError::CapacityExceeded);
         }
 
@@ -346,16 +373,18 @@ mod tests {
 
         let mut attempts = 0;
 
-        let result = policy.execute(|| {
-            attempts += 1;
-            async move {
-                if attempts < 3 {
-                    Err("not yet")
-                } else {
-                    Ok("success")
+        let result = policy
+            .execute(|| {
+                attempts += 1;
+                async move {
+                    if attempts < 3 {
+                        Err("not yet")
+                    } else {
+                        Ok("success")
+                    }
                 }
-            }
-        }).await;
+            })
+            .await;
 
         assert_eq!(result, Ok("success"));
         assert_eq!(attempts, 3);
@@ -374,14 +403,16 @@ mod tests {
             b1.call(|| async {
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 "task1"
-            }).await
+            })
+            .await
         });
 
         let task2 = tokio::spawn(async move {
             b2.call(|| async {
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 "task2"
-            }).await
+            })
+            .await
         });
 
         tokio::time::sleep(Duration::from_millis(10)).await;

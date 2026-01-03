@@ -4,14 +4,19 @@
 //! using Redis Streams for distributed processing of CodeRabbit analysis jobs.
 //! Job metadata is also persisted to the database for historical queries and audit trails.
 
-use axum::{extract::{Path, State, Request}, http::StatusCode, response::Response, Extension, Json};
-use coderabbit_orchestrator::{RedisOrchestrator, JobType, JobStatus};
+use super::database::{CreateJobRequest as DbCreateJobRequest, DatabaseState};
+use crate::middleware::auth::Claims;
+use axum::{
+    extract::{Path, Request, State},
+    http::StatusCode,
+    response::Response,
+    Extension, Json,
+};
+use coderabbit_orchestrator::{JobStatus, JobType, RedisOrchestrator};
 use serde_json::json;
 use std::sync::Arc;
+use tracing::{error, info};
 use uuid::Uuid;
-use tracing::{info, error};
-use super::database::{DatabaseState, CreateJobRequest as DbCreateJobRequest};
-use crate::middleware::auth::Claims;
 
 /// Job creation request
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -174,13 +179,18 @@ impl JobOrchestrationState {
     }
 
     /// Update job progress
-    pub async fn update_job_progress(&self, job_id: &str, progress: ProgressInfo, status: Option<String>) {
+    pub async fn update_job_progress(
+        &self,
+        job_id: &str,
+        progress: ProgressInfo,
+        status: Option<String>,
+    ) {
         let percentage = progress.percentage; // Store before moving
         let mut queue = self.job_queue.lock().await;
         if let Some(job_info) = queue.jobs.get_mut(job_id) {
             job_info.progress = Some(progress);
             job_info.updated_at = chrono::Utc::now().to_rfc3339();
-            
+
             if let Some(status) = status {
                 job_info.status = status;
             }
@@ -199,7 +209,9 @@ impl JobOrchestrationState {
 
             // Move from pending to completed
             queue.pending.retain(|id| id != job_id);
-            queue.completed.insert(job_id.to_string(), chrono::Utc::now().to_rfc3339());
+            queue
+                .completed
+                .insert(job_id.to_string(), chrono::Utc::now().to_rfc3339());
 
             // Update metrics by locking the mutex
             {
@@ -214,10 +226,10 @@ impl JobOrchestrationState {
     /// Cancel a pending job
     pub async fn cancel_job(&self, job_id: &str) -> Result<(), String> {
         let mut queue = self.job_queue.lock().await;
-        
+
         // Remove from pending queue
         queue.pending.retain(|id| id != job_id);
-        
+
         // Update job status
         if let Some(job_info) = queue.jobs.get_mut(job_id) {
             job_info.status = "cancelled".to_string();
@@ -231,7 +243,8 @@ impl JobOrchestrationState {
     /// Get all job IDs for a repository
     pub async fn get_repository_jobs(&self, repository_id: &str) -> Vec<String> {
         let queue = self.job_queue.lock().await;
-        queue.jobs
+        queue
+            .jobs
             .values()
             .filter(|job| job.repository_id == repository_id)
             .map(|job| job.job_id.clone())
@@ -252,25 +265,30 @@ pub async fn create_job(
     req: Request,
 ) -> Result<Response<String>, StatusCode> {
     // Extract claims from request extensions (if auth is enabled)
-    let organization_id = req.extensions().get::<Claims>()
+    let organization_id = req
+        .extensions()
+        .get::<Claims>()
         .and_then(|claims| Uuid::parse_str(&claims.sub).ok())
         .unwrap_or_else(Uuid::new_v4);
 
     // Extract the JSON body
     let (_, body) = req.into_parts();
-    let bytes = axum::body::to_bytes(body, usize::MAX).await
+    let bytes = axum::body::to_bytes(body, usize::MAX)
+        .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let request: CreateJobRequest = serde_json::from_slice(&bytes)
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let request: CreateJobRequest =
+        serde_json::from_slice(&bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    info!("Received job creation request for PR {} from org {}", request.pull_request_id, organization_id);
+    info!(
+        "Received job creation request for PR {} from org {}",
+        request.pull_request_id, organization_id
+    );
 
     // Serialize the request as the job payload
-    let payload = serde_json::to_string(&request)
-        .map_err(|e| {
-            tracing::error!("Failed to serialize job request: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let payload = serde_json::to_string(&request).map_err(|e| {
+        tracing::error!("Failed to serialize job request: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Convert priority string to u8 (0-9)
     let priority = match request.priority.as_str() {
@@ -290,10 +308,10 @@ pub async fn create_job(
         })?;
 
     // Parse repository_id and pull_request_id as UUIDs
-    let repository_uuid = Uuid::parse_str(&request.repository_id)
-        .unwrap_or_else(|_| Uuid::new_v4());
-    let pull_request_uuid = Uuid::parse_str(&request.pull_request_id)
-        .unwrap_or_else(|_| Uuid::new_v4());
+    let repository_uuid =
+        Uuid::parse_str(&request.repository_id).unwrap_or_else(|_| Uuid::new_v4());
+    let pull_request_uuid =
+        Uuid::parse_str(&request.pull_request_id).unwrap_or_else(|_| Uuid::new_v4());
 
     // Persist job metadata to database for historical queries
     let db_job = DbCreateJobRequest {
@@ -319,11 +337,14 @@ pub async fn create_job(
 
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(json!({
-            "job_id": job_id,
-            "status": "pending",
-            "message": "Job created successfully"
-        }).to_string())
+        .body(
+            json!({
+                "job_id": job_id,
+                "status": "pending",
+                "message": "Job created successfully"
+            })
+            .to_string(),
+        )
         .unwrap())
 }
 
@@ -336,13 +357,10 @@ pub async fn get_job_status(
     info!("Getting job status for {}", job_id);
 
     // Get job metadata from Redis
-    let metadata = orchestrator
-        .get_job_metadata(&job_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get job metadata for {}: {}", job_id, e);
-            StatusCode::NOT_FOUND
-        })?;
+    let metadata = orchestrator.get_job_metadata(&job_id).await.map_err(|e| {
+        tracing::error!("Failed to get job metadata for {}: {}", job_id, e);
+        StatusCode::NOT_FOUND
+    })?;
 
     // Convert JobStatus to string
     let status_str = match metadata.status {
@@ -351,7 +369,8 @@ pub async fn get_job_status(
         JobStatus::Completed => "completed",
         JobStatus::Failed => "failed",
         JobStatus::Retrying => "retrying",
-    }.to_string();
+    }
+    .to_string();
 
     // Calculate progress based on status
     let progress = match metadata.status {
@@ -388,12 +407,15 @@ pub async fn get_job_status(
     };
 
     // Update job status in database
-    if let Err(e) = db_state.update_job_status(
-        &job_id,
-        &status_str,
-        progress.as_ref().map(|p| p.percentage as i32).unwrap_or(0),
-        progress.as_ref().map(|p| p.current_step.as_str())
-    ).await {
+    if let Err(e) = db_state
+        .update_job_status(
+            &job_id,
+            &status_str,
+            progress.as_ref().map(|p| p.percentage as i32).unwrap_or(0),
+            progress.as_ref().map(|p| p.current_step.as_str()),
+        )
+        .await
+    {
         error!("Failed to update job status in DB: {}", e);
         // Continue anyway - Redis is source of truth
     }
@@ -422,21 +444,21 @@ pub async fn cancel_job(
     info!("Cancelling job {}", job_id);
 
     // Cancel the job using orchestrator
-    orchestrator
-        .cancel_job(&job_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to cancel job {}: {}", job_id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    orchestrator.cancel_job(&job_id).await.map_err(|e| {
+        tracing::error!("Failed to cancel job {}: {}", job_id, e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(json!({
-            "job_id": job_id,
-            "status": "cancelled",
-            "message": "Job cancelled successfully"
-        }).to_string())
+        .body(
+            json!({
+                "job_id": job_id,
+                "status": "cancelled",
+                "message": "Job cancelled successfully"
+            })
+            .to_string(),
+        )
         .unwrap())
 }
 
@@ -452,22 +474,26 @@ pub async fn get_repository_jobs(
     match db_state.get_jobs(&repository_id, Some(100)).await {
         Ok(db_jobs) => {
             let job_ids: Vec<String> = db_jobs.iter().map(|j| j.id.to_string()).collect();
-            info!("Found {} jobs for repository {} from database", job_ids.len(), repository_id);
+            info!(
+                "Found {} jobs for repository {} from database",
+                job_ids.len(),
+                repository_id
+            );
             return Ok(Json(job_ids));
         }
         Err(e) => {
-            error!("Failed to get jobs from database: {}, falling back to Redis", e);
+            error!(
+                "Failed to get jobs from database: {}, falling back to Redis",
+                e
+            );
         }
     }
 
     // Fallback: Get all job IDs from Redis
-    let all_job_ids = orchestrator
-        .get_all_job_ids()
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get job IDs: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let all_job_ids = orchestrator.get_all_job_ids().await.map_err(|e| {
+        tracing::error!("Failed to get job IDs: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Filter jobs by repository_id by checking the payload
     let mut matching_jobs = Vec::new();
@@ -482,7 +508,11 @@ pub async fn get_repository_jobs(
         }
     }
 
-    info!("Found {} jobs for repository {}", matching_jobs.len(), repository_id);
+    info!(
+        "Found {} jobs for repository {}",
+        matching_jobs.len(),
+        repository_id
+    );
     Ok(Json(matching_jobs))
 }
 
@@ -494,10 +524,8 @@ pub async fn get_orchestration_metrics(
     info!("Getting orchestration metrics");
 
     // Get metrics from orchestrator
-    let (total_jobs, completed_jobs, failed_jobs, avg_processing_time_ms) = orchestrator
-        .get_metrics()
-        .await
-        .map_err(|e| {
+    let (total_jobs, completed_jobs, failed_jobs, avg_processing_time_ms) =
+        orchestrator.get_metrics().await.map_err(|e| {
             tracing::error!("Failed to get metrics: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -507,12 +535,15 @@ pub async fn get_orchestration_metrics(
 
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .body(json!({
-            "total_jobs_created": total_jobs,
-            "jobs_completed": completed_jobs,
-            "jobs_failed": failed_jobs,
-            "average_processing_time_ms": avg_processing_time_ms,
-            "data_source": "redis_orchestrator"
-        }).to_string())
+        .body(
+            json!({
+                "total_jobs_created": total_jobs,
+                "jobs_completed": completed_jobs,
+                "jobs_failed": failed_jobs,
+                "average_processing_time_ms": avg_processing_time_ms,
+                "data_source": "redis_orchestrator"
+            })
+            .to_string(),
+        )
         .unwrap())
 }

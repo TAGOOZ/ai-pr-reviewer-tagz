@@ -1,4 +1,4 @@
-use coderabbit_shared::{Result, CodeRabbitError};
+use coderabbit_shared::{CodeRabbitError, Result};
 // use candle_core::{Device, Tensor}; // Commented out for initial setup
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -35,52 +35,68 @@ impl EmbeddingGenerator {
     }
 
     pub async fn generate_embeddings(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
-        tracing::info!("Generating embeddings for {} texts using OpenAI API", texts.len());
-        
+        tracing::info!(
+            "Generating embeddings for {} texts using OpenAI API",
+            texts.len()
+        );
+
         let request = EmbeddingRequest {
             input: texts,
             model: self.model.clone(),
         };
 
-            // Call OpenAI API
-            let response = self.client
-                .post("https://api.openai.com/v1/embeddings")
-                .header("Authorization", format!("Bearer {}", self.api_key))
-                .header("Content-Type", "application/json")
-                .json(&request)
-                .send()
+        // Call OpenAI API
+        let response = self
+            .client
+            .post("https://api.openai.com/v1/embeddings")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| {
+                CodeRabbitError::ExternalAPIError(format!("OpenAI API request failed: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
                 .await
-                .map_err(|e| CodeRabbitError::ExternalAPIError(format!("OpenAI API request failed: {}", e)))?;
-        
-            if !response.status().is_success() {
-                let status = response.status();
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                return Err(CodeRabbitError::ExternalAPIError(
-                    format!("OpenAI API returned status {}: {}", status, error_text)
-                ));
-            }
-        
-            let embedding_response: EmbeddingResponse = response.json().await
-                .map_err(|e| CodeRabbitError::ExternalAPIError(format!("Failed to parse OpenAI response: {}", e)))?;
-        
-            let embeddings = embedding_response.data
-                .into_iter()
-                .map(|d| d.embedding)
-                .collect();
-        
-            Ok(embeddings)
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::ExternalAPIError(format!(
+                "OpenAI API returned status {}: {}",
+                status, error_text
+            )));
+        }
+
+        let embedding_response: EmbeddingResponse = response.json().await.map_err(|e| {
+            CodeRabbitError::ExternalAPIError(format!("Failed to parse OpenAI response: {}", e))
+        })?;
+
+        let embeddings = embedding_response
+            .data
+            .into_iter()
+            .map(|d| d.embedding)
+            .collect();
+
+        Ok(embeddings)
     }
 
-    pub async fn generate_code_embeddings(&self, code_snippets: Vec<String>) -> Result<Vec<Vec<f32>>> {
-            // Preprocess code snippets for better embedding quality
-            let preprocessed: Vec<String> = code_snippets.iter()
-                .map(|code| {
-                    // Add code-specific context
-                    format!("Code snippet:\n{}", code)
-                })
-                .collect();
-        
-            self.generate_embeddings(preprocessed).await
+    pub async fn generate_code_embeddings(
+        &self,
+        code_snippets: Vec<String>,
+    ) -> Result<Vec<Vec<f32>>> {
+        // Preprocess code snippets for better embedding quality
+        let preprocessed: Vec<String> = code_snippets
+            .iter()
+            .map(|code| {
+                // Add code-specific context
+                format!("Code snippet:\n{}", code)
+            })
+            .collect();
+
+        self.generate_embeddings(preprocessed).await
     }
 
     pub async fn generate_embeddings_chunked(
@@ -89,7 +105,9 @@ impl EmbeddingGenerator {
         chunk_size: usize,
     ) -> Result<Vec<Vec<f32>>> {
         if chunk_size == 0 {
-            return Err(CodeRabbitError::ConfigError("chunk_size must be > 0".to_string()));
+            return Err(CodeRabbitError::ConfigError(
+                "chunk_size must be > 0".to_string(),
+            ));
         }
 
         let mut all_embeddings: Vec<Vec<f32>> = Vec::with_capacity(texts.len());
@@ -157,7 +175,10 @@ impl CohereEmbeddings {
     }
 
     pub async fn generate_embeddings(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
-        tracing::info!("Generating embeddings for {} texts using Cohere API", texts.len());
+        tracing::info!(
+            "Generating embeddings for {} texts using Cohere API",
+            texts.len()
+        );
 
         let request = CohereEmbeddingRequest {
             texts,
@@ -165,32 +186,44 @@ impl CohereEmbeddings {
             input_type: "search_document".to_string(),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.cohere.ai/v1/embed")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
             .await
-            .map_err(|e| CodeRabbitError::ExternalAPIError(format!("Cohere API request failed: {}", e)))?;
+            .map_err(|e| {
+                CodeRabbitError::ExternalAPIError(format!("Cohere API request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::ExternalAPIError(
-                format!("Cohere API returned status {}: {}", status, error_text)
-            ));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::ExternalAPIError(format!(
+                "Cohere API returned status {}: {}",
+                status, error_text
+            )));
         }
 
-        let embedding_response: CohereEmbeddingResponse = response.json().await
-            .map_err(|e| CodeRabbitError::ExternalAPIError(format!("Failed to parse Cohere response: {}", e)))?;
+        let embedding_response: CohereEmbeddingResponse = response.json().await.map_err(|e| {
+            CodeRabbitError::ExternalAPIError(format!("Failed to parse Cohere response: {}", e))
+        })?;
 
         Ok(embedding_response.embeddings)
     }
 
-    pub async fn generate_code_embeddings(&self, code_snippets: Vec<String>) -> Result<Vec<Vec<f32>>> {
+    pub async fn generate_code_embeddings(
+        &self,
+        code_snippets: Vec<String>,
+    ) -> Result<Vec<Vec<f32>>> {
         // Preprocess code snippets for better embedding quality
-        let preprocessed: Vec<String> = code_snippets.iter()
+        let preprocessed: Vec<String> = code_snippets
+            .iter()
             .map(|code| {
                 // Add code-specific context
                 format!("Code snippet:\n{}", code)
@@ -201,7 +234,10 @@ impl CohereEmbeddings {
     }
 
     pub async fn generate_query_embeddings(&self, queries: Vec<String>) -> Result<Vec<Vec<f32>>> {
-        tracing::info!("Generating query embeddings for {} queries using Cohere API", queries.len());
+        tracing::info!(
+            "Generating query embeddings for {} queries using Cohere API",
+            queries.len()
+        );
 
         let request = CohereEmbeddingRequest {
             texts: queries,
@@ -209,25 +245,33 @@ impl CohereEmbeddings {
             input_type: "search_query".to_string(), // Use search_query for queries
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.cohere.ai/v1/embed")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
             .await
-            .map_err(|e| CodeRabbitError::ExternalAPIError(format!("Cohere API request failed: {}", e)))?;
+            .map_err(|e| {
+                CodeRabbitError::ExternalAPIError(format!("Cohere API request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::ExternalAPIError(
-                format!("Cohere API returned status {}: {}", status, error_text)
-            ));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::ExternalAPIError(format!(
+                "Cohere API returned status {}: {}",
+                status, error_text
+            )));
         }
 
-        let embedding_response: CohereEmbeddingResponse = response.json().await
-            .map_err(|e| CodeRabbitError::ExternalAPIError(format!("Failed to parse Cohere response: {}", e)))?;
+        let embedding_response: CohereEmbeddingResponse = response.json().await.map_err(|e| {
+            CodeRabbitError::ExternalAPIError(format!("Failed to parse Cohere response: {}", e))
+        })?;
 
         Ok(embedding_response.embeddings)
     }
@@ -238,7 +282,9 @@ impl CohereEmbeddings {
         chunk_size: usize,
     ) -> Result<Vec<Vec<f32>>> {
         if chunk_size == 0 {
-            return Err(CodeRabbitError::ConfigError("chunk_size must be > 0".to_string()));
+            return Err(CodeRabbitError::ConfigError(
+                "chunk_size must be > 0".to_string(),
+            ));
         }
 
         let mut all_embeddings: Vec<Vec<f32>> = Vec::with_capacity(texts.len());

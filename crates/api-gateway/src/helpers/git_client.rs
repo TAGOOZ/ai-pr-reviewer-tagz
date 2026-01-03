@@ -1,8 +1,8 @@
-use coderabbit_shared::models::{FileChange, ChangeType};
-use coderabbit_shared::{Result, CodeRabbitError};
+use base64::Engine;
+use coderabbit_shared::models::{ChangeType, FileChange};
+use coderabbit_shared::{CodeRabbitError, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use base64::Engine;
 
 /// GitHub API client for fetching PR diffs
 pub struct GitHubClient {
@@ -18,7 +18,12 @@ impl GitHubClient {
         }
     }
 
-    pub async fn fetch_pr_files(&self, repo_owner: &str, repo_name: &str, pr_number: u32) -> Result<Vec<FileChange>> {
+    pub async fn fetch_pr_files(
+        &self,
+        repo_owner: &str,
+        repo_name: &str,
+        pr_number: u32,
+    ) -> Result<Vec<FileChange>> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/files",
             repo_owner, repo_name, pr_number
@@ -26,7 +31,9 @@ impl GitHubClient {
 
         tracing::info!("Fetching GitHub PR files from: {}", url);
 
-        let mut request = self.client.get(&url)
+        let mut request = self
+            .client
+            .get(&url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "CodeRabbit-AI-PR-Reviewer");
 
@@ -34,17 +41,26 @@ impl GitHubClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("GitHub API request failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("GitHub API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("GitHub API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "GitHub API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let files: Vec<GitHubFile> = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse GitHub response: {}", e)))?;
+        let files: Vec<GitHubFile> = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse GitHub response: {}", e))
+        })?;
 
         // Fetch content for each file
         let mut file_changes = Vec::new();
@@ -87,15 +103,23 @@ impl GitHubClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to fetch file content: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to fetch file content: {}", e))
+        })?;
 
-        response.text().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to read file content: {}", e)))
+        response.text().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to read file content: {}", e))
+        })
     }
 
     /// Post a general comment on a pull request
-    pub async fn post_comment(&self, repo_owner: &str, repo_name: &str, pr_number: u32, body: &str) -> Result<u64> {
+    pub async fn post_comment(
+        &self,
+        repo_owner: &str,
+        repo_name: &str,
+        pr_number: u32,
+        body: &str,
+    ) -> Result<u64> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/issues/{}/comments",
             repo_owner, repo_name, pr_number
@@ -107,7 +131,9 @@ impl GitHubClient {
             "body": body
         });
 
-        let mut request = self.client.post(&url)
+        let mut request = self
+            .client
+            .post(&url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "CodeRabbit-AI-PR-Reviewer")
             .json(&comment_body);
@@ -116,17 +142,27 @@ impl GitHubClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to post comment: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("GitHub API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "GitHub API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let comment: GitHubComment = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse comment response: {}", e)))?;
+        let comment: GitHubComment = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse comment response: {}", e))
+        })?;
 
         tracing::info!("Successfully posted comment with ID: {}", comment.id);
         Ok(comment.id)
@@ -147,7 +183,11 @@ impl GitHubClient {
             repo_owner, repo_name, pr_number
         );
 
-        tracing::info!("Posting review to GitHub PR #{} with {} comments", pr_number, comments.len());
+        tracing::info!(
+            "Posting review to GitHub PR #{} with {} comments",
+            pr_number,
+            comments.len()
+        );
 
         let review_body = serde_json::json!({
             "body": body,
@@ -155,7 +195,9 @@ impl GitHubClient {
             "comments": comments
         });
 
-        let mut request = self.client.post(&url)
+        let mut request = self
+            .client
+            .post(&url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "CodeRabbit-AI-PR-Reviewer")
             .json(&review_body);
@@ -164,17 +206,27 @@ impl GitHubClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to post review: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("GitHub API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "GitHub API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let review: GitHubReview = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse review response: {}", e)))?;
+        let review: GitHubReview = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse review response: {}", e))
+        })?;
 
         tracing::info!("Successfully posted review with ID: {}", review.id);
         Ok(review.id)
@@ -195,7 +247,9 @@ impl GitHubClient {
 
         tracing::info!("Fetching file content from: {}", url);
 
-        let mut request = self.client.get(&url)
+        let mut request = self
+            .client
+            .get(&url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "CodeRabbit-AI");
 
@@ -203,17 +257,27 @@ impl GitHubClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to fetch file: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("GitHub API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "GitHub API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let file_response: FileContentResponse = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse file response: {}", e)))?;
+        let file_response: FileContentResponse = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse file response: {}", e))
+        })?;
 
         Ok(file_response)
     }
@@ -230,7 +294,9 @@ impl GitHubClient {
             repo_owner, repo_name, pr_number
         );
 
-        let mut request = self.client.get(&url)
+        let mut request = self
+            .client
+            .get(&url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "CodeRabbit-AI");
 
@@ -238,15 +304,22 @@ impl GitHubClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to fetch PR: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
-            return Err(CodeRabbitError::from(anyhow::anyhow!("GitHub API returned {}", status)));
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "GitHub API returned {}",
+                status
+            )));
         }
 
-        let pr_data: serde_json::Value = response.json().await
+        let pr_data: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse PR: {}", e)))?;
 
         Ok(PRDetails {
@@ -284,7 +357,9 @@ impl GitHubClient {
             "sha": sha,
         });
 
-        let mut request = self.client.put(&url)
+        let mut request = self
+            .client
+            .put(&url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "CodeRabbit-AI")
             .json(&body);
@@ -293,19 +368,32 @@ impl GitHubClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to update file: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("GitHub API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "GitHub API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let response_data: serde_json::Value = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse response: {}", e)))?;
+        let response_data: serde_json::Value = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse response: {}", e))
+        })?;
 
-        let commit_sha = response_data["commit"]["sha"].as_str().unwrap_or("").to_string();
+        let commit_sha = response_data["commit"]["sha"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
 
         tracing::info!("File updated successfully, commit SHA: {}", commit_sha);
         Ok(commit_sha)
@@ -323,36 +411,40 @@ impl GitHubClient {
         commit_message: &str,
     ) -> Result<String> {
         // Get PR details to find head branch
-        let pr_details = self.get_pr_details(repo_owner, repo_name, pr_number).await?;
+        let pr_details = self
+            .get_pr_details(repo_owner, repo_name, pr_number)
+            .await?;
 
         // Fetch current file content from head branch
-        let file_response = self.fetch_file_from_ref(
-            repo_owner,
-            repo_name,
-            file_path,
-            &pr_details.head_ref,
-        ).await?;
+        let file_response = self
+            .fetch_file_from_ref(repo_owner, repo_name, file_path, &pr_details.head_ref)
+            .await?;
 
         // Decode current content
         let current_content = String::from_utf8(
             base64::engine::general_purpose::STANDARD
                 .decode(&file_response.content.replace('\n', ""))
-                .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to decode file content: {}", e)))?
-        ).map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Invalid UTF-8 in file: {}", e)))?;
+                .map_err(|e| {
+                    CodeRabbitError::from(anyhow::anyhow!("Failed to decode file content: {}", e))
+                })?,
+        )
+        .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Invalid UTF-8 in file: {}", e)))?;
 
         // Apply the suggested change
         let new_content = current_content.replace(original_content, suggested_content);
 
         // Update the file
-        let commit_sha = self.update_file(
-            repo_owner,
-            repo_name,
-            file_path,
-            &new_content,
-            commit_message,
-            &pr_details.head_ref,
-            &file_response.sha,
-        ).await?;
+        let commit_sha = self
+            .update_file(
+                repo_owner,
+                repo_name,
+                file_path,
+                &new_content,
+                commit_message,
+                &pr_details.head_ref,
+                &file_response.sha,
+            )
+            .await?;
 
         Ok(commit_sha)
     }
@@ -404,17 +496,26 @@ impl GitLabClient {
             request = request.header("PRIVATE-TOKEN", token);
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("GitLab API request failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("GitLab API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("GitLab API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "GitLab API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let mr_changes: GitLabMergeRequestChanges = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse GitLab response: {}", e)))?;
+        let mr_changes: GitLabMergeRequestChanges = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse GitLab response: {}", e))
+        })?;
 
         let mut file_changes = Vec::new();
         for change in mr_changes.changes {
@@ -423,7 +524,7 @@ impl GitLabClient {
             } else if change.deleted_file {
                 ChangeType::Deleted
             } else {
-                ChangeType::Modified  // Including renamed files
+                ChangeType::Modified // Including renamed files
             };
 
             let language = detect_language(&change.new_path);
@@ -456,7 +557,12 @@ impl BitbucketClient {
         }
     }
 
-    pub async fn fetch_pr_files(&self, workspace: &str, repo_slug: &str, pr_id: u32) -> Result<Vec<FileChange>> {
+    pub async fn fetch_pr_files(
+        &self,
+        workspace: &str,
+        repo_slug: &str,
+        pr_id: u32,
+    ) -> Result<Vec<FileChange>> {
         let url = format!(
             "https://api.bitbucket.org/2.0/repositories/{}/{}/pullrequests/{}/diffstat",
             workspace, repo_slug, pr_id
@@ -470,32 +576,53 @@ impl BitbucketClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Bitbucket API request failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Bitbucket API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("Bitbucket API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "Bitbucket API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let diffstat: BitbucketDiffstat = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse Bitbucket response: {}", e)))?;
+        let diffstat: BitbucketDiffstat = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse Bitbucket response: {}", e))
+        })?;
 
         let mut file_changes = Vec::new();
         for value in diffstat.values {
             let (path, change_type) = match value.status.as_str() {
                 "added" => (
-                    value.new.as_ref().map(|f| f.path.clone()).unwrap_or_default(),
-                    ChangeType::Added
+                    value
+                        .new
+                        .as_ref()
+                        .map(|f| f.path.clone())
+                        .unwrap_or_default(),
+                    ChangeType::Added,
                 ),
                 "removed" => (
-                    value.old.as_ref().map(|f| f.path.clone()).unwrap_or_default(),
-                    ChangeType::Deleted
+                    value
+                        .old
+                        .as_ref()
+                        .map(|f| f.path.clone())
+                        .unwrap_or_default(),
+                    ChangeType::Deleted,
                 ),
                 "modified" | "renamed" => (
-                    value.new.as_ref().map(|f| f.path.clone()).unwrap_or_default(),
-                    ChangeType::Modified
+                    value
+                        .new
+                        .as_ref()
+                        .map(|f| f.path.clone())
+                        .unwrap_or_default(),
+                    ChangeType::Modified,
                 ),
                 _ => continue, // Skip unknown statuses
             };
@@ -536,36 +663,66 @@ impl AzureDevOpsClient {
         }
     }
 
-    pub async fn fetch_pr_files(&self, project: &str, repository_id: &str, pr_id: u32) -> Result<Vec<FileChange>> {
+    pub async fn fetch_pr_files(
+        &self,
+        project: &str,
+        repository_id: &str,
+        pr_id: u32,
+    ) -> Result<Vec<FileChange>> {
         // First, get the list of changed files
         let iterations_url = format!(
             "https://dev.azure.com/{}/{}/_apis/git/repositories/{}/pullRequests/{}/iterations?api-version=7.0",
             self.organization, project, repository_id, pr_id
         );
 
-        tracing::info!("Fetching Azure DevOps PR iterations from: {}", iterations_url);
+        tracing::info!(
+            "Fetching Azure DevOps PR iterations from: {}",
+            iterations_url
+        );
 
-        let mut request = self.client.get(&iterations_url)
+        let mut request = self
+            .client
+            .get(&iterations_url)
             .header("Accept", "application/json");
 
         if let Some(token) = &self.token {
-            request = request.header("Authorization", format!("Basic {}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, format!(":{}", token))));
+            request = request.header(
+                "Authorization",
+                format!(
+                    "Basic {}",
+                    base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        format!(":{}", token)
+                    )
+                ),
+            );
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Azure API request failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Azure API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("Azure API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "Azure API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let iterations: AzureIterationsResponse = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse Azure iterations: {}", e)))?;
+        let iterations: AzureIterationsResponse = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse Azure iterations: {}", e))
+        })?;
 
         // Get the latest iteration
-        let latest_iteration = iterations.value.iter()
+        let latest_iteration = iterations
+            .value
+            .iter()
             .max_by_key(|i| i.id)
             .ok_or_else(|| CodeRabbitError::from(anyhow::anyhow!("No iterations found for PR")))?;
 
@@ -577,24 +734,47 @@ impl AzureDevOpsClient {
 
         tracing::info!("Fetching Azure DevOps PR changes from: {}", changes_url);
 
-        let mut request = self.client.get(&changes_url)
+        let mut request = self
+            .client
+            .get(&changes_url)
             .header("Accept", "application/json");
 
         if let Some(token) = &self.token {
-            request = request.header("Authorization", format!("Basic {}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, format!(":{}", token))));
+            request = request.header(
+                "Authorization",
+                format!(
+                    "Basic {}",
+                    base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        format!(":{}", token)
+                    )
+                ),
+            );
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Azure API request for changes failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!(
+                "Azure API request for changes failed: {}",
+                e
+            ))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("Azure API changes returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "Azure API changes returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let changes_response: AzureChangesResponse = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse Azure changes: {}", e)))?;
+        let changes_response: AzureChangesResponse = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse Azure changes: {}", e))
+        })?;
 
         let mut file_changes = Vec::new();
 
@@ -611,13 +791,13 @@ impl AzureDevOpsClient {
             // Fetch file content if needed (skip for deleted files)
             let content = match change.change_type.as_str() {
                 "delete" => String::new(),
-                _ => {
-                    self.fetch_file_content(project, repository_id, &change.item.object_id).await
-                        .unwrap_or_else(|e| {
-                            tracing::warn!("Failed to fetch content for {}: {}", change.item.path, e);
-                            String::new()
-                        })
-                }
+                _ => self
+                    .fetch_file_content(project, repository_id, &change.item.object_id)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("Failed to fetch content for {}: {}", change.item.path, e);
+                        String::new()
+                    }),
             };
 
             file_changes.push(FileChange {
@@ -633,24 +813,39 @@ impl AzureDevOpsClient {
         Ok(file_changes)
     }
 
-    async fn fetch_file_content(&self, project: &str, repository_id: &str, object_id: &str) -> Result<String> {
+    async fn fetch_file_content(
+        &self,
+        project: &str,
+        repository_id: &str,
+        object_id: &str,
+    ) -> Result<String> {
         let url = format!(
             "https://dev.azure.com/{}/{}/_apis/git/repositories/{}/blobs/{}?api-version=7.0",
             self.organization, project, repository_id, object_id
         );
 
-        let mut request = self.client.get(&url)
-            .header("Accept", "text/plain");
+        let mut request = self.client.get(&url).header("Accept", "text/plain");
 
         if let Some(token) = &self.token {
-            request = request.header("Authorization", format!("Basic {}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, format!(":{}", token))));
+            request = request.header(
+                "Authorization",
+                format!(
+                    "Basic {}",
+                    base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        format!(":{}", token)
+                    )
+                ),
+            );
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to fetch Azure file content: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to fetch Azure file content: {}", e))
+        })?;
 
-        response.text().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to read Azure file content: {}", e)))
+        response.text().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to read Azure file content: {}", e))
+        })
     }
 }
 
@@ -668,7 +863,12 @@ impl OldBitbucketClient {
         }
     }
 
-    pub async fn fetch_pr_files(&self, workspace: &str, repo_slug: &str, pr_id: u32) -> Result<Vec<FileChange>> {
+    pub async fn fetch_pr_files(
+        &self,
+        workspace: &str,
+        repo_slug: &str,
+        pr_id: u32,
+    ) -> Result<Vec<FileChange>> {
         let url = format!(
             "https://api.bitbucket.org/2.0/repositories/{}/{}/pullrequests/{}/diffstat",
             workspace, repo_slug, pr_id
@@ -682,17 +882,26 @@ impl OldBitbucketClient {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request.send().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Bitbucket API request failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Bitbucket API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(CodeRabbitError::from(anyhow::anyhow!("Bitbucket API returned {}: {}", status, error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(CodeRabbitError::from(anyhow::anyhow!(
+                "Bitbucket API returned {}: {}",
+                status,
+                error_text
+            )));
         }
 
-        let diffstat: BitbucketDiffstat = response.json().await
-            .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse Bitbucket response: {}", e)))?;
+        let diffstat: BitbucketDiffstat = response.json().await.map_err(|e| {
+            CodeRabbitError::from(anyhow::anyhow!("Failed to parse Bitbucket response: {}", e))
+        })?;
 
         let mut file_changes = Vec::new();
         for change in diffstat.values {
@@ -914,7 +1123,7 @@ mod tests {
     fn test_gitlab_client_custom_base_url() {
         let client = GitLabClient::new(
             Some("token".to_string()),
-            Some("https://gitlab.example.com/api/v4".to_string())
+            Some("https://gitlab.example.com/api/v4".to_string()),
         );
         assert_eq!(client.base_url, "https://gitlab.example.com/api/v4");
     }
@@ -934,10 +1143,7 @@ mod tests {
 
     #[test]
     fn test_azure_client_creation() {
-        let client = AzureDevOpsClient::new(
-            Some("token".to_string()),
-            "my-org".to_string()
-        );
+        let client = AzureDevOpsClient::new(Some("token".to_string()), "my-org".to_string());
         assert!(client.token.is_some());
         assert_eq!(client.organization, "my-org");
     }

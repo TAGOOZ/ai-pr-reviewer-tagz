@@ -1,11 +1,11 @@
-use coderabbit_shared::{Result, FileChange};
-use rayon::prelude::*;
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::metrics::MetricsCalculator;
+use crate::parser::LanguageParser;
 use crate::rules::RuleEngine;
 use crate::static_analysis::StaticAnalyzer;
-use crate::parser::LanguageParser;
+use coderabbit_shared::{FileChange, Result};
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Issue {
@@ -82,7 +82,10 @@ impl CodeAnalyzer {
         results
     }
 
-    pub async fn analyze_file_batch(&self, files: Vec<FileChange>) -> Result<Vec<CodeAnalysisResult>> {
+    pub async fn analyze_file_batch(
+        &self,
+        files: Vec<FileChange>,
+    ) -> Result<Vec<CodeAnalysisResult>> {
         // Thin wrapper to provide a clear batch API surface
         self.analyze_files(files).await
     }
@@ -104,8 +107,11 @@ impl CodeAnalyzer {
                 added_lines += 1;
 
                 // Check if this is a function definition
-                if line.contains("fn ") || line.contains("def ") ||
-                   line.contains("function ") || line.contains("func ") {
+                if line.contains("fn ")
+                    || line.contains("def ")
+                    || line.contains("function ")
+                    || line.contains("func ")
+                {
                     // Extract function name
                     if let Some(func_name) = self.extract_function_name(line) {
                         current_function = Some(func_name.clone());
@@ -118,8 +124,11 @@ impl CodeAnalyzer {
                 removed_lines += 1;
 
                 // Check if this is a function definition being removed
-                if line.contains("fn ") || line.contains("def ") ||
-                   line.contains("function ") || line.contains("func ") {
+                if line.contains("fn ")
+                    || line.contains("def ")
+                    || line.contains("function ")
+                    || line.contains("func ")
+                {
                     if let Some(func_name) = self.extract_function_name(line) {
                         if !modified_functions.contains(&func_name) {
                             modified_functions.push(func_name);
@@ -142,7 +151,10 @@ impl CodeAnalyzer {
 
         tracing::info!(
             "Diff analysis complete: +{} -{} lines, {} functions modified, risk score: {:.2}",
-            added_lines, removed_lines, modified_functions.len(), risk_score
+            added_lines,
+            removed_lines,
+            modified_functions.len(),
+            risk_score
         );
 
         Ok(DiffAnalysis {
@@ -163,13 +175,15 @@ impl CodeAnalyzer {
             (r"def\s+(\w+)", "def "),
             (r"function\s+(\w+)", "function "),
             (r"func\s+(\w+)", "func "),
-            (r"(\w+)\s*\(", ""),  // Generic pattern: name(
+            (r"(\w+)\s*\(", ""), // Generic pattern: name(
         ];
 
         for (_, keyword) in patterns {
             if let Some(pos) = trimmed.find(keyword) {
                 let after_keyword = &trimmed[pos + keyword.len()..];
-                if let Some(name_end) = after_keyword.find(|c: char| !c.is_alphanumeric() && c != '_') {
+                if let Some(name_end) =
+                    after_keyword.find(|c: char| !c.is_alphanumeric() && c != '_')
+                {
                     let name = after_keyword[..name_end].trim();
                     if !name.is_empty() {
                         return Some(name.to_string());
@@ -216,24 +230,24 @@ impl CodeAnalyzer {
 
     pub async fn extract_embeddings(&self, code: &str) -> Result<Vec<f32>> {
         tracing::info!("Extracting embeddings for code snippet");
-        
+
         // Call Python embedding service via HTTP
         let client = reqwest::Client::new();
-        
+
         #[derive(serde::Serialize)]
         struct EmbeddingRequest {
             text: String,
         }
-        
+
         #[derive(serde::Deserialize)]
         struct EmbeddingResponse {
             embedding: Vec<f32>,
         }
-        
+
         // Try to call the embedding service
         let embedding_url = std::env::var("EMBEDDING_SERVICE_URL")
             .unwrap_or_else(|_| "http://localhost:8081/embed".to_string());
-        
+
         match client
             .post(&embedding_url)
             .json(&EmbeddingRequest {
@@ -247,7 +261,10 @@ impl CodeAnalyzer {
                 if response.status().is_success() {
                     match response.json::<EmbeddingResponse>().await {
                         Ok(data) => {
-                            tracing::debug!("Successfully extracted embeddings: {} dimensions", data.embedding.len());
+                            tracing::debug!(
+                                "Successfully extracted embeddings: {} dimensions",
+                                data.embedding.len()
+                            );
                             Ok(data.embedding)
                         }
                         Err(e) => {
@@ -270,41 +287,52 @@ impl CodeAnalyzer {
 
     fn analyze_single_file(&self, file: FileChange) -> Result<CodeAnalysisResult> {
         tracing::info!("Analyzing file: {}", file.path);
-        
+
         // Apply static analysis rules
         let issues = self.rule_engine.apply_rules(&file.content, &file.language);
-        
+
         // Calculate code metrics
         let metrics = MetricsCalculator::calculate_metrics(&file.content, &file.language);
-        
+
         // Extract AST features using tree-sitter
         let ast_features = self.extract_ast_features(&file.content, &file.language);
-        
+
         Ok(CodeAnalysisResult {
             file_path: file.path,
             language: file.language,
             issues,
             metrics,
-            embeddings: vec![],  // Embeddings are extracted separately via async method
+            embeddings: vec![], // Embeddings are extracted separately via async method
             ast_features,
         })
     }
-    
+
     fn extract_ast_features(&self, code: &str, language: &str) -> ASTFeatures {
         // Try tree-sitter parsing first, fall back to heuristics if it fails
         match self.extract_ast_features_with_treesitter(code, language) {
             Ok(features) => {
-                tracing::debug!("Successfully extracted AST features using tree-sitter for {}", language);
+                tracing::debug!(
+                    "Successfully extracted AST features using tree-sitter for {}",
+                    language
+                );
                 features
             }
             Err(e) => {
-                tracing::debug!("Tree-sitter parsing failed for {}: {}. Using heuristic fallback.", language, e);
+                tracing::debug!(
+                    "Tree-sitter parsing failed for {}: {}. Using heuristic fallback.",
+                    language,
+                    e
+                );
                 self.extract_ast_features_heuristic(code, language)
             }
         }
     }
 
-    fn extract_ast_features_with_treesitter(&self, code: &str, language: &str) -> Result<ASTFeatures> {
+    fn extract_ast_features_with_treesitter(
+        &self,
+        code: &str,
+        language: &str,
+    ) -> Result<ASTFeatures> {
         let mut parser = LanguageParser::new()?;
         let tree = parser.parse(language, code)?;
         let root_node = tree.root_node();
@@ -324,56 +352,51 @@ impl CodeAnalyzer {
 
             // Count functions based on language-specific node types
             match language {
-                "rust" => {
-                    match kind {
-                        "function_item" => function_count += 1,
-                        "struct_item" | "enum_item" | "impl_item" => class_count += 1,
-                        "use_declaration" => import_count += 1,
-                        "if_expression" | "match_expression" | "while_expression" |
-                        "for_expression" | "loop_expression" => decision_points += 1,
-                        _ => {}
+                "rust" => match kind {
+                    "function_item" => function_count += 1,
+                    "struct_item" | "enum_item" | "impl_item" => class_count += 1,
+                    "use_declaration" => import_count += 1,
+                    "if_expression" | "match_expression" | "while_expression"
+                    | "for_expression" | "loop_expression" => decision_points += 1,
+                    _ => {}
+                },
+                "python" => match kind {
+                    "function_definition" => function_count += 1,
+                    "class_definition" => class_count += 1,
+                    "import_statement" | "import_from_statement" => import_count += 1,
+                    "if_statement" | "while_statement" | "for_statement" | "match_statement" => {
+                        decision_points += 1
                     }
-                }
-                "python" => {
-                    match kind {
-                        "function_definition" => function_count += 1,
-                        "class_definition" => class_count += 1,
-                        "import_statement" | "import_from_statement" => import_count += 1,
-                        "if_statement" | "while_statement" | "for_statement" |
-                        "match_statement" => decision_points += 1,
-                        _ => {}
+                    _ => {}
+                },
+                "javascript" | "typescript" => match kind {
+                    "function_declaration"
+                    | "function"
+                    | "arrow_function"
+                    | "method_definition" => function_count += 1,
+                    "class_declaration" => class_count += 1,
+                    "import_statement" => import_count += 1,
+                    "if_statement" | "while_statement" | "for_statement" | "switch_statement" => {
+                        decision_points += 1
                     }
-                }
-                "javascript" | "typescript" => {
-                    match kind {
-                        "function_declaration" | "function" | "arrow_function" |
-                        "method_definition" => function_count += 1,
-                        "class_declaration" => class_count += 1,
-                        "import_statement" => import_count += 1,
-                        "if_statement" | "while_statement" | "for_statement" |
-                        "switch_statement" => decision_points += 1,
-                        _ => {}
+                    _ => {}
+                },
+                "java" => match kind {
+                    "method_declaration" => function_count += 1,
+                    "class_declaration" | "interface_declaration" => class_count += 1,
+                    "import_declaration" => import_count += 1,
+                    "if_statement" | "while_statement" | "for_statement" | "switch_expression" => {
+                        decision_points += 1
                     }
-                }
-                "java" => {
-                    match kind {
-                        "method_declaration" => function_count += 1,
-                        "class_declaration" | "interface_declaration" => class_count += 1,
-                        "import_declaration" => import_count += 1,
-                        "if_statement" | "while_statement" | "for_statement" |
-                        "switch_expression" => decision_points += 1,
-                        _ => {}
-                    }
-                }
-                "go" => {
-                    match kind {
-                        "function_declaration" | "method_declaration" => function_count += 1,
-                        "type_declaration" => class_count += 1,
-                        "import_declaration" => import_count += 1,
-                        "if_statement" | "for_statement" | "switch_statement" => decision_points += 1,
-                        _ => {}
-                    }
-                }
+                    _ => {}
+                },
+                "go" => match kind {
+                    "function_declaration" | "method_declaration" => function_count += 1,
+                    "type_declaration" => class_count += 1,
+                    "import_declaration" => import_count += 1,
+                    "if_statement" | "for_statement" | "switch_statement" => decision_points += 1,
+                    _ => {}
+                },
                 _ => {}
             }
 
@@ -431,7 +454,10 @@ impl CodeAnalyzer {
             }
             _ => {
                 // Generic counting for other languages
-                function_count = code.lines().filter(|l| l.contains("function") || l.contains("def")).count();
+                function_count = code
+                    .lines()
+                    .filter(|l| l.contains("function") || l.contains("def"))
+                    .count();
                 class_count = code.matches("class ").count();
             }
         }
@@ -446,23 +472,25 @@ impl CodeAnalyzer {
             complexity_score,
         }
     }
-    
+
     fn calculate_cyclomatic_complexity(&self, code: &str, language: &str) -> f32 {
         // Simplified cyclomatic complexity calculation
         // Count decision points: if, else, while, for, case, match, etc.
-        
+
         let decision_keywords = match language {
             "rust" => vec!["if ", "else", "while ", "for ", "match ", "loop "],
             "python" => vec!["if ", "elif ", "else:", "while ", "for ", "try:", "except:"],
-            "javascript" | "typescript" => vec!["if ", "else", "while ", "for ", "switch ", "case "],
+            "javascript" | "typescript" => {
+                vec!["if ", "else", "while ", "for ", "switch ", "case "]
+            }
             _ => vec!["if ", "else", "while ", "for "],
         };
-        
+
         let mut decision_count = 1; // Base complexity is 1
         for keyword in decision_keywords {
             decision_count += code.matches(keyword).count();
         }
-        
+
         // Normalize by lines of code
         let loc = code.lines().count() as f32;
         if loc > 0.0 {
@@ -475,36 +503,39 @@ impl CodeAnalyzer {
 
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use coderabbit_shared::{FileChange, ChangeType};
+    use super::*;
+    use coderabbit_shared::{ChangeType, FileChange};
 
-	#[tokio::test]
-	async fn batch_analysis_returns_same_count_as_input() {
-		let analyzer = CodeAnalyzer::new();
-		let files = vec![
-			FileChange {
-				path: "a.rs".into(),
-				change_type: ChangeType::Modified,
-				content: "fn main() {}".into(),
-				diff: "".into(),
-				language: "rust".into(),
-			},
-			FileChange {
-				path: "b.ts".into(),
-				change_type: ChangeType::Added,
-				content: "export const x=1".into(),
-				diff: "".into(),
-				language: "typescript".into(),
-			},
-			FileChange {
-				path: "c.py".into(),
-				change_type: ChangeType::Deleted,
-				content: "print('x')".into(),
-				diff: "".into(),
-				language: "python".into(),
-			},
-		];
-		let results = analyzer.analyze_file_batch(files.clone()).await.expect("analyze_file_batch");
-		assert_eq!(results.len(), files.len());
+    #[tokio::test]
+    async fn batch_analysis_returns_same_count_as_input() {
+        let analyzer = CodeAnalyzer::new();
+        let files = vec![
+            FileChange {
+                path: "a.rs".into(),
+                change_type: ChangeType::Modified,
+                content: "fn main() {}".into(),
+                diff: "".into(),
+                language: "rust".into(),
+            },
+            FileChange {
+                path: "b.ts".into(),
+                change_type: ChangeType::Added,
+                content: "export const x=1".into(),
+                diff: "".into(),
+                language: "typescript".into(),
+            },
+            FileChange {
+                path: "c.py".into(),
+                change_type: ChangeType::Deleted,
+                content: "print('x')".into(),
+                diff: "".into(),
+                language: "python".into(),
+            },
+        ];
+        let results = analyzer
+            .analyze_file_batch(files.clone())
+            .await
+            .expect("analyze_file_batch");
+        assert_eq!(results.len(), files.len());
     }
 }

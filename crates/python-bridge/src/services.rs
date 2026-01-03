@@ -3,12 +3,12 @@
 //! This module provides async service implementations that bridge Rust services
 //! with Python DSPy agents for the CodeRabbit AI code review system.
 
+use anyhow::Result;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_trait::async_trait;
-use anyhow::Result;
-use tracing::{info, error};
 use tokio::sync::RwLock;
+use tracing::{error, info};
 
 use crate::models::*;
 use coderabbit_vector_engine::search::SemanticSearch;
@@ -16,17 +16,39 @@ use coderabbit_vector_engine::search::SemanticSearch;
 /// Service trait for code analysis operations
 #[async_trait]
 pub trait CodeAnalysisServiceTrait {
-    async fn analyze_code(&self, file_path: &str, content: &str, language: &str) -> Result<PythonCodeAnalysis>;
-    async fn batch_analyze_files(&self, files: &[(String, String, String)]) -> Result<Vec<PythonCodeAnalysis>>;
+    async fn analyze_code(
+        &self,
+        file_path: &str,
+        content: &str,
+        language: &str,
+    ) -> Result<PythonCodeAnalysis>;
+    async fn batch_analyze_files(
+        &self,
+        files: &[(String, String, String)],
+    ) -> Result<Vec<PythonCodeAnalysis>>;
     async fn extract_embeddings(&self, content: &str) -> Result<Vec<f32>>;
-    async fn generate_code_metrics(&self, content: &str, language: &str) -> Result<PythonCodeMetrics>;
+    async fn generate_code_metrics(
+        &self,
+        content: &str,
+        language: &str,
+    ) -> Result<PythonCodeMetrics>;
 }
 
 /// Service trait for vector operations
 #[async_trait]
 pub trait VectorServiceTrait {
-    async fn search_similar_code(&self, query_embedding: &[f32], k: usize, filters: Option<HashMap<String, String>>) -> Result<Vec<PythonVectorResult>>;
-    async fn add_code_to_index(&self, content: &str, embedding: &[f32], metadata: Option<HashMap<String, String>>) -> Result<String>;
+    async fn search_similar_code(
+        &self,
+        query_embedding: &[f32],
+        k: usize,
+        filters: Option<HashMap<String, String>>,
+    ) -> Result<Vec<PythonVectorResult>>;
+    async fn add_code_to_index(
+        &self,
+        content: &str,
+        embedding: &[f32],
+        metadata: Option<HashMap<String, String>>,
+    ) -> Result<String>;
     async fn update_code_index(&self, id: &str, content: &str, embedding: &[f32]) -> Result<()>;
     async fn delete_from_index(&self, id: &str) -> Result<()>;
 }
@@ -49,18 +71,25 @@ pub struct CodeAnalysisService {
 impl CodeAnalysisService {
     pub fn new() -> Result<Self> {
         info!("Initializing CodeAnalysisService...");
-        let analyzer = Arc::new(RwLock::new(coderabbit_code_analyzer::analyzer::CodeAnalyzer::new()));
+        let analyzer = Arc::new(RwLock::new(
+            coderabbit_code_analyzer::analyzer::CodeAnalyzer::new(),
+        ));
         Ok(Self { analyzer })
     }
 }
 
 #[async_trait]
 impl CodeAnalysisServiceTrait for CodeAnalysisService {
-    async fn analyze_code(&self, file_path: &str, content: &str, language: &str) -> Result<PythonCodeAnalysis> {
+    async fn analyze_code(
+        &self,
+        file_path: &str,
+        content: &str,
+        language: &str,
+    ) -> Result<PythonCodeAnalysis> {
         info!("Analyzing code in {} ({} bytes)", file_path, content.len());
-        
+
         let analyzer = self.analyzer.read().await;
-        
+
         // Generate AST features and metrics
         let start_time = std::time::Instant::now();
 
@@ -85,15 +114,18 @@ impl CodeAnalysisServiceTrait for CodeAnalysisService {
             embeddings,
             analysis_time_ms,
         };
-        
+
         Ok(analysis)
     }
 
-    async fn batch_analyze_files(&self, files: &[(String, String, String)]) -> Result<Vec<PythonCodeAnalysis>> {
+    async fn batch_analyze_files(
+        &self,
+        files: &[(String, String, String)],
+    ) -> Result<Vec<PythonCodeAnalysis>> {
         info!("Batch analyzing {} files", files.len());
-        
+
         let mut results = Vec::new();
-        
+
         for (file_path, content, language) in files {
             match self.analyze_code(file_path, content, language).await {
                 Ok(analysis) => results.push(analysis),
@@ -103,7 +135,7 @@ impl CodeAnalysisServiceTrait for CodeAnalysisService {
                 }
             }
         }
-        
+
         Ok(results)
     }
 
@@ -113,7 +145,9 @@ impl CodeAnalysisServiceTrait for CodeAnalysisService {
         // In production, this would call an actual embedding model API
 
         let engine = coderabbit_vector_engine::VectorEngine::new().await?;
-        let embeddings = engine.generate_embeddings(vec![content.to_string()]).await?;
+        let embeddings = engine
+            .generate_embeddings(vec![content.to_string()])
+            .await?;
 
         if let Some(embedding) = embeddings.into_iter().next() {
             Ok(embedding)
@@ -122,12 +156,16 @@ impl CodeAnalysisServiceTrait for CodeAnalysisService {
         }
     }
 
-    async fn generate_code_metrics(&self, content: &str, language: &str) -> Result<PythonCodeMetrics> {
+    async fn generate_code_metrics(
+        &self,
+        content: &str,
+        language: &str,
+    ) -> Result<PythonCodeMetrics> {
         let lines_of_code = content.lines().count() as u32;
         let cyclomatic_complexity = self.calculate_cyclomatic_complexity(content, language);
         let maintainability_index = self.calculate_maintainability_index(content, language);
         let technical_debt_minutes = self.estimate_technical_debt(content, language);
-        
+
         Ok(PythonCodeMetrics {
             lines_of_code,
             cyclomatic_complexity,
@@ -138,7 +176,11 @@ impl CodeAnalysisServiceTrait for CodeAnalysisService {
 }
 
 impl CodeAnalysisService {
-    async fn generate_ast_features(&self, content: &str, language: &str) -> Result<PythonASTFeatures> {
+    async fn generate_ast_features(
+        &self,
+        content: &str,
+        language: &str,
+    ) -> Result<PythonASTFeatures> {
         // Use actual tree-sitter parsing to extract AST features
         use coderabbit_code_analyzer::parser::LanguageParser;
         use tree_sitter::Node;
@@ -184,9 +226,9 @@ impl CodeAnalysisService {
         class_count = class_count.max(1);
         import_count = import_count.max(1);
 
-        let complexity_score = (function_count as f32 * 0.3
-            + class_count as f32 * 0.5
-            + import_count as f32 * 0.2) / 10.0;
+        let complexity_score =
+            (function_count as f32 * 0.3 + class_count as f32 * 0.5 + import_count as f32 * 0.2)
+                / 10.0;
 
         Ok(PythonASTFeatures {
             function_count,
@@ -211,7 +253,10 @@ impl CodeAnalysisService {
                     severity: "low".to_string(),
                     message: "TODO/FIXME comment should be tracked in issue tracker".to_string(),
                     line: line_number,
-                    column: line.find("TODO").or_else(|| line.find("FIXME")).unwrap_or(0) as u32,
+                    column: line
+                        .find("TODO")
+                        .or_else(|| line.find("FIXME"))
+                        .unwrap_or(0) as u32,
                     fix_suggestion: Some("Convert to GitHub issue".to_string()),
                 });
             }
@@ -229,15 +274,21 @@ impl CodeAnalysisService {
             }
 
             // 3. Check for hardcoded credentials patterns
-            if trimmed.contains("password") || trimmed.contains("api_key") || trimmed.contains("secret") {
-                if trimmed.contains("=") && !trimmed.starts_with("//") && !trimmed.starts_with("#") {
+            if trimmed.contains("password")
+                || trimmed.contains("api_key")
+                || trimmed.contains("secret")
+            {
+                if trimmed.contains("=") && !trimmed.starts_with("//") && !trimmed.starts_with("#")
+                {
                     issues.push(PythonIssue {
                         rule_id: "hardcoded-credentials".to_string(),
                         severity: "high".to_string(),
                         message: "Possible hardcoded credentials detected".to_string(),
                         line: line_number,
                         column: 0,
-                        fix_suggestion: Some("Use environment variables or secrets manager".to_string()),
+                        fix_suggestion: Some(
+                            "Use environment variables or secrets manager".to_string(),
+                        ),
                     });
                 }
             }
@@ -268,7 +319,10 @@ impl CodeAnalysisService {
             }
 
             // 5. Check for unsafe SQL patterns
-            if trimmed.contains("SELECT") || trimmed.contains("INSERT") || trimmed.contains("UPDATE") {
+            if trimmed.contains("SELECT")
+                || trimmed.contains("INSERT")
+                || trimmed.contains("UPDATE")
+            {
                 if trimmed.contains("+") || trimmed.contains(&format!("\"")) {
                     issues.push(PythonIssue {
                         rule_id: "sql-injection-risk".to_string(),
@@ -286,10 +340,13 @@ impl CodeAnalysisService {
                 issues.push(PythonIssue {
                     rule_id: "dangerous-eval".to_string(),
                     severity: "critical".to_string(),
-                    message: "Use of eval/exec is dangerous and can lead to code injection".to_string(),
+                    message: "Use of eval/exec is dangerous and can lead to code injection"
+                        .to_string(),
                     line: line_number,
                     column: line.find("eval").or_else(|| line.find("exec")).unwrap_or(0) as u32,
-                    fix_suggestion: Some("Avoid eval/exec or use ast.literal_eval for safe evaluation".to_string()),
+                    fix_suggestion: Some(
+                        "Avoid eval/exec or use ast.literal_eval for safe evaluation".to_string(),
+                    ),
                 });
             }
 
@@ -301,10 +358,14 @@ impl CodeAnalysisService {
                         issues.push(PythonIssue {
                             rule_id: "bare-except".to_string(),
                             severity: "medium".to_string(),
-                            message: "Bare except clause catches all exceptions including system exits".to_string(),
+                            message:
+                                "Bare except clause catches all exceptions including system exits"
+                                    .to_string(),
                             line: line_number + 1,
                             column: 0,
-                            fix_suggestion: Some("Specify exception type: except Exception:".to_string()),
+                            fix_suggestion: Some(
+                                "Specify exception type: except Exception:".to_string(),
+                            ),
                         });
                     }
                 }
@@ -317,17 +378,21 @@ impl CodeAnalysisService {
     fn calculate_cyclomatic_complexity(&self, content: &str, language: &str) -> u32 {
         // Simple complexity calculation
         let mut complexity = 1; // Base complexity
-        
+
         let keywords = match language {
-            "python" => &["if", "elif", "else", "for", "while", "try", "except", "with", "and", "or"][..],
-            "rust" => &["if", "else", "for", "while", "match", "try", "catch", "&&", "||"][..],
+            "python" => &[
+                "if", "elif", "else", "for", "while", "try", "except", "with", "and", "or",
+            ][..],
+            "rust" => &[
+                "if", "else", "for", "while", "match", "try", "catch", "&&", "||",
+            ][..],
             _ => &["if", "else", "for", "while", "switch", "case", "&&", "||"][..],
         };
-        
+
         for keyword in keywords {
             complexity += content.matches(keyword).count();
         }
-        
+
         complexity as u32
     }
 
@@ -337,9 +402,15 @@ impl CodeAnalysisService {
         let complexity = self.calculate_cyclomatic_complexity(content, language) as f32;
 
         // Simple maintainability index calculation
-        if lines == 0.0 { return 0.0; }
+        if lines == 0.0 {
+            return 0.0;
+        }
 
-        let function_density = if lines > 0.0 { functions as f32 / lines * 100.0 } else { 0.0 };
+        let function_density = if lines > 0.0 {
+            functions as f32 / lines * 100.0
+        } else {
+            0.0
+        };
         let complexity_penalty = complexity / lines * 10.0;
 
         let index = 100.0 - complexity_penalty - function_density;
@@ -366,16 +437,28 @@ pub struct VectorService {
 impl VectorService {
     pub async fn new() -> Result<Self> {
         info!("Initializing VectorService with SemanticSearch engine...");
-        let table_name = std::env::var("LANCEDB_TABLE").unwrap_or_else(|_| "code_vectors".to_string());
+        let table_name =
+            std::env::var("LANCEDB_TABLE").unwrap_or_else(|_| "code_vectors".to_string());
         let engine = SemanticSearch::new(&table_name).await?;
-        Ok(Self { search_engine: Arc::new(engine) })
+        Ok(Self {
+            search_engine: Arc::new(engine),
+        })
     }
 }
 
 #[async_trait]
 impl VectorServiceTrait for VectorService {
-    async fn search_similar_code(&self, query_embedding: &[f32], k: usize, _filters: Option<HashMap<String, String>>) -> Result<Vec<PythonVectorResult>> {
-        info!("Searching for similar code with {} dimensions, k={}", query_embedding.len(), k);
+    async fn search_similar_code(
+        &self,
+        query_embedding: &[f32],
+        k: usize,
+        _filters: Option<HashMap<String, String>>,
+    ) -> Result<Vec<PythonVectorResult>> {
+        info!(
+            "Searching for similar code with {} dimensions, k={}",
+            query_embedding.len(),
+            k
+        );
         let results = self
             .search_engine
             .search_similar_code(query_embedding, k, None)
@@ -394,14 +477,28 @@ impl VectorServiceTrait for VectorService {
         Ok(mapped)
     }
 
-    async fn add_code_to_index(&self, content: &str, embedding: &[f32], metadata: Option<HashMap<String, String>>) -> Result<String> {
+    async fn add_code_to_index(
+        &self,
+        content: &str,
+        embedding: &[f32],
+        metadata: Option<HashMap<String, String>>,
+    ) -> Result<String> {
         let id = uuid::Uuid::new_v4().to_string();
-        info!("Adding code to vector index: {} ({} bytes)", id, content.len());
+        info!(
+            "Adding code to vector index: {} ({} bytes)",
+            id,
+            content.len()
+        );
 
         let metadata = metadata.unwrap_or_default();
 
         self.search_engine
-            .add_code(id.clone(), content.to_string(), embedding.to_vec(), metadata)
+            .add_code(
+                id.clone(),
+                content.to_string(),
+                embedding.to_vec(),
+                metadata,
+            )
             .await?;
 
         info!("Successfully added code {} to vector index", id);
@@ -443,8 +540,8 @@ impl OrchestrationService {
     pub fn new() -> Result<Self> {
         info!("Initializing OrchestrationService with RedisOrchestrator...");
 
-        let redis_url = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
 
         let orchestrator = coderabbit_orchestrator::RedisOrchestrator::new(&redis_url)?;
         let job_statuses = Arc::new(RwLock::new(HashMap::new()));
@@ -456,14 +553,20 @@ impl OrchestrationService {
     }
 
     pub async fn initialize(&self) -> Result<()> {
-        self.orchestrator.initialize().await.map_err(|e| anyhow::anyhow!("Failed to initialize orchestrator: {}", e))
+        self.orchestrator
+            .initialize()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to initialize orchestrator: {}", e))
     }
 }
 
 #[async_trait]
 impl OrchestrationServiceTrait for OrchestrationService {
     async fn submit_job(&self, request: PythonAnalysisRequest) -> Result<String> {
-        info!("Submitting analysis job for repository: {}", request.repository_id);
+        info!(
+            "Submitting analysis job for repository: {}",
+            request.repository_id
+        );
 
         // Serialize the request as the job payload
         let payload = serde_json::to_string(&request)?;
@@ -475,7 +578,10 @@ impl OrchestrationServiceTrait for OrchestrationService {
         let priority = 5;
 
         // Submit job to Redis orchestrator
-        let job_id = self.orchestrator.enqueue_job(job_type, payload, priority).await?;
+        let job_id = self
+            .orchestrator
+            .enqueue_job(job_type, payload, priority)
+            .await?;
 
         // Update local cache
         {
@@ -490,7 +596,8 @@ impl OrchestrationServiceTrait for OrchestrationService {
 
     async fn get_job_status(&self, job_id: &str) -> Result<String> {
         let statuses = self.job_statuses.read().await;
-        let status = statuses.get(job_id)
+        let status = statuses
+            .get(job_id)
             .map(|s| s.clone())
             .unwrap_or_else(|| "not_found".to_string());
         Ok(status)
@@ -498,10 +605,10 @@ impl OrchestrationServiceTrait for OrchestrationService {
 
     async fn cancel_job(&self, job_id: &str) -> Result<()> {
         info!("Cancelling job: {}", job_id);
-        
+
         let mut statuses = self.job_statuses.write().await;
         statuses.insert(job_id.to_string(), "cancelled".to_string());
-        
+
         Ok(())
     }
 
@@ -509,7 +616,10 @@ impl OrchestrationServiceTrait for OrchestrationService {
         info!("Fetching job result for: {}", job_id);
 
         // Query job status from Redis orchestrator
-        let job_status = self.orchestrator.get_job_status(job_id).await
+        let job_status = self
+            .orchestrator
+            .get_job_status(job_id)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get job status: {}", e))?;
 
         match job_status {
@@ -531,7 +641,8 @@ impl OrchestrationServiceTrait for OrchestrationService {
                 // 2. Deserialize the PythonCodeAnalysis from JSON
                 Ok(None)
             }
-            coderabbit_orchestrator::JobStatus::Processing | coderabbit_orchestrator::JobStatus::Pending => {
+            coderabbit_orchestrator::JobStatus::Processing
+            | coderabbit_orchestrator::JobStatus::Pending => {
                 info!("Job {} still in progress", job_id);
                 Ok(None)
             }

@@ -1,7 +1,7 @@
-use axum::{Json, http::StatusCode, Extension};
-use serde::{Deserialize, Serialize};
-use coderabbit_shared::{CodeRabbitError, AppConfig};
 use crate::helpers::git_client::GitHubClient;
+use axum::{http::StatusCode, Extension, Json};
+use coderabbit_shared::{AppConfig, CodeRabbitError};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
@@ -60,8 +60,11 @@ pub async fn handle_comment_webhook(
     Extension(config): Extension<Arc<AppConfig>>,
     Json(webhook): Json<CommentWebhook>,
 ) -> std::result::Result<Json<CommentResponse>, (StatusCode, Json<serde_json::Value>)> {
-    tracing::info!("Received comment webhook: action={}, repo={}",
-        webhook.action, webhook.repository.full_name);
+    tracing::info!(
+        "Received comment webhook: action={}, repo={}",
+        webhook.action,
+        webhook.repository.full_name
+    );
 
     // Only process 'created' action
     if webhook.action != "created" {
@@ -76,7 +79,10 @@ pub async fn handle_comment_webhook(
     // Check if this is a PR comment
     let issue = webhook.issue.ok_or_else(|| {
         tracing::error!("No issue in comment webhook");
-        (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "No issue in payload"})))
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "No issue in payload"})),
+        )
     })?;
 
     if issue.pull_request.is_none() {
@@ -111,8 +117,11 @@ pub async fn handle_comment_webhook(
         }));
     }
 
-    tracing::info!("Bot mentioned by {} in PR #{}",
-        webhook.comment.user.login, issue.number);
+    tracing::info!(
+        "Bot mentioned by {} in PR #{}",
+        webhook.comment.user.login,
+        issue.number
+    );
 
     // Extract question/request from comment
     let question = extract_question_from_comment(&webhook.comment.body, &bot_mention);
@@ -124,26 +133,27 @@ pub async fn handle_comment_webhook(
     let pr_number = issue.number as u32;
 
     // Fetch PR files for context
-    let files = github_client.fetch_pr_files(owner, repo, pr_number)
+    let files = github_client
+        .fetch_pr_files(owner, repo, pr_number)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch PR files: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to fetch PR context: {}", e)
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to fetch PR context: {}", e)
+                })),
+            )
         })?;
 
     // Load conversation history
-    let conversation_history = load_comment_thread(
-        &github_client,
-        owner,
-        repo,
-        pr_number,
-        webhook.comment.id,
-    ).await.unwrap_or_else(|e| {
-        tracing::warn!("Failed to load conversation history: {}", e);
-        Vec::new()
-    });
+    let conversation_history =
+        load_comment_thread(&github_client, owner, repo, pr_number, webhook.comment.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to load conversation history: {}", e);
+                Vec::new()
+            });
 
     // Generate contextual response
     let response_text = generate_response(
@@ -151,10 +161,14 @@ pub async fn handle_comment_webhook(
         &files,
         &conversation_history,
         &webhook.comment.user.login,
-    ).await;
+    )
+    .await;
 
     // Post reply comment
-    match github_client.post_comment(owner, repo, pr_number, &response_text).await {
+    match github_client
+        .post_comment(owner, repo, pr_number, &response_text)
+        .await
+    {
         Ok(comment_id) => {
             tracing::info!("Posted reply comment with ID: {}", comment_id);
             Ok(Json(CommentResponse {
@@ -165,9 +179,12 @@ pub async fn handle_comment_webhook(
         }
         Err(e) => {
             tracing::error!("Failed to post reply: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to post reply: {}", e)
-            }))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to post reply: {}", e)
+                })),
+            ))
         }
     }
 }
@@ -175,10 +192,7 @@ pub async fn handle_comment_webhook(
 /// Extract the actual question/request from comment, removing mention
 fn extract_question_from_comment(comment_body: &str, bot_mention: &str) -> String {
     // Remove the mention and clean up
-    let question = comment_body
-        .replace(bot_mention, "")
-        .trim()
-        .to_string();
+    let question = comment_body.replace(bot_mention, "").trim().to_string();
 
     // If empty after removing mention, use a default
     if question.is_empty() {
@@ -197,7 +211,10 @@ async fn load_comment_thread(
     current_comment_id: u64,
 ) -> Result<Vec<ConversationMessage>, CodeRabbitError> {
     let client = reqwest::Client::new();
-    let url = format!("https://api.github.com/repos/{}/{}/issues/{}/comments", owner, repo, pr_number);
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/issues/{}/comments",
+        owner, repo, pr_number
+    );
 
     let token = std::env::var("GITHUB_TOKEN").ok();
     if token.is_none() {
@@ -217,7 +234,9 @@ async fn load_comment_thread(
         return Ok(Vec::new());
     }
 
-    let comments: Vec<serde_json::Value> = response.json().await
+    let comments: Vec<serde_json::Value> = response
+        .json()
+        .await
         .map_err(|e| CodeRabbitError::from(anyhow::anyhow!("Failed to parse comments: {}", e)))?;
 
     let mut conversation = Vec::new();
@@ -230,7 +249,10 @@ async fn load_comment_thread(
         }
 
         conversation.push(ConversationMessage {
-            author: comment["user"]["login"].as_str().unwrap_or("unknown").to_string(),
+            author: comment["user"]["login"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string(),
             body: comment["body"].as_str().unwrap_or("").to_string(),
             timestamp: comment["created_at"].as_str().unwrap_or("").to_string(),
         });
@@ -269,9 +291,14 @@ async fn generate_response(
 
     // Add conversation context
     if !conversation_history.is_empty() {
-        context_parts.push(format!("\nPrevious conversation ({} messages):", conversation_history.len()));
+        context_parts.push(format!(
+            "\nPrevious conversation ({} messages):",
+            conversation_history.len()
+        ));
         for msg in conversation_history.iter().rev().take(5) {
-            context_parts.push(format!("{}: {}", msg.author,
+            context_parts.push(format!(
+                "{}: {}",
+                msg.author,
                 if msg.body.len() > 100 {
                     format!("{}...", &msg.body[..100])
                 } else {
@@ -287,17 +314,25 @@ async fn generate_response(
     let response = if question_lower.contains("explain") || question_lower.contains("what") {
         // Explanation request
         let file_summary = if files.len() == 1 {
-            format!("This PR modifies `{}`, which is a {} file. ", files[0].path, files[0].language)
+            format!(
+                "This PR modifies `{}`, which is a {} file. ",
+                files[0].path, files[0].language
+            )
         } else {
-            format!("This PR modifies {} files across different components. ", files.len())
+            format!(
+                "This PR modifies {} files across different components. ",
+                files.len()
+            )
         };
 
-        format!("Thanks for asking, @{}! {}\n\n\
+        format!(
+            "Thanks for asking, @{}! {}\n\n\
                  The changes focus on {}. \n\n\
                  Would you like me to dive deeper into any specific file or aspect?",
-                user,
-                file_summary,
-                categorize_changes(files))
+            user,
+            file_summary,
+            categorize_changes(files)
+        )
     } else if question_lower.contains("why") {
         // Reasoning request
         format!("@{}, great question! Based on the file changes, this appears to be addressing {}. \n\n\
@@ -308,29 +343,43 @@ async fn generate_response(
                 infer_change_intent(files))
     } else if question_lower.contains("test") || question_lower.contains("tested") {
         // Testing inquiry
-        let test_files: Vec<_> = files.iter()
+        let test_files: Vec<_> = files
+            .iter()
             .filter(|f| f.path.to_lowercase().contains("test"))
             .collect();
 
         if test_files.is_empty() {
-            format!("@{}, I don't see any test files in this PR. \n\n\
+            format!(
+                "@{}, I don't see any test files in this PR. \n\n\
                      Consider adding tests for:\n\
                      - Core functionality changes\n\
                      - Edge cases\n\
                      - Integration points\n\n\
                      Would you like me to suggest specific test scenarios?",
-                    user)
+                user
+            )
         } else {
-            format!("@{}, this PR includes {} test file(s): \n\n{}\n\n\
+            format!(
+                "@{}, this PR includes {} test file(s): \n\n{}\n\n\
                      The test coverage looks {}. Need more specific testing recommendations?",
-                    user,
-                    test_files.len(),
-                    test_files.iter().map(|f| format!("- {}", f.path)).collect::<Vec<_>>().join("\n"),
-                    if test_files.len() >= files.len() / 3 { "good" } else { "light" })
+                user,
+                test_files.len(),
+                test_files
+                    .iter()
+                    .map(|f| format!("- {}", f.path))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                if test_files.len() >= files.len() / 3 {
+                    "good"
+                } else {
+                    "light"
+                }
+            )
         }
     } else if question_lower.contains("security") || question_lower.contains("secure") {
         // Security inquiry
-        format!("@{}, regarding security: \n\n\
+        format!(
+            "@{}, regarding security: \n\n\
                  I'll analyze the changes for potential security concerns:\n\
                  - Input validation\n\
                  - Authentication/authorization\n\
@@ -338,19 +387,23 @@ async fn generate_response(
                  - Dependency vulnerabilities\n\n\
                  Based on the files modified, the security impact appears {}. \n\n\
                  Want me to do a deeper security analysis?",
-                user,
-                assess_security_risk(files))
+            user,
+            assess_security_risk(files)
+        )
     } else if question_lower.contains("performance") {
         // Performance inquiry
-        format!("@{}, from a performance perspective:\n\n\
+        format!(
+            "@{}, from a performance perspective:\n\n\
                  The changes affect {} file(s). {}\n\n\
                  Would you like detailed performance recommendations?",
-                user,
-                files.len(),
-                assess_performance_impact(files))
+            user,
+            files.len(),
+            assess_performance_impact(files)
+        )
     } else {
         // General inquiry
-        format!("@{}, I'm here to help! \n\n\
+        format!(
+            "@{}, I'm here to help! \n\n\
                  This PR modifies {} file(s). I can provide insights on:\n\
                  - 🔍 Code explanation\n\
                  - 🛡️ Security analysis\n\
@@ -358,8 +411,9 @@ async fn generate_response(
                  - 🧪 Testing recommendations\n\
                  - 📋 Best practices\n\n\
                  What would you like to know more about?",
-                user,
-                files.len())
+            user,
+            files.len()
+        )
     };
 
     response
@@ -368,12 +422,23 @@ async fn generate_response(
 fn categorize_changes(files: &[coderabbit_shared::FileChange]) -> String {
     let mut categories = Vec::new();
 
-    let test_files = files.iter().filter(|f| f.path.to_lowercase().contains("test")).count();
-    let doc_files = files.iter().filter(|f| f.path.ends_with(".md") || f.path.ends_with(".txt")).count();
-    let config_files = files.iter().filter(|f|
-        f.path.ends_with(".yaml") || f.path.ends_with(".yml") ||
-        f.path.ends_with(".json") || f.path.ends_with(".toml")
-    ).count();
+    let test_files = files
+        .iter()
+        .filter(|f| f.path.to_lowercase().contains("test"))
+        .count();
+    let doc_files = files
+        .iter()
+        .filter(|f| f.path.ends_with(".md") || f.path.ends_with(".txt"))
+        .count();
+    let config_files = files
+        .iter()
+        .filter(|f| {
+            f.path.ends_with(".yaml")
+                || f.path.ends_with(".yml")
+                || f.path.ends_with(".json")
+                || f.path.ends_with(".toml")
+        })
+        .count();
     let code_files = files.len() - test_files - doc_files - config_files;
 
     if code_files > 0 {
@@ -393,13 +458,19 @@ fn categorize_changes(files: &[coderabbit_shared::FileChange]) -> String {
 }
 
 fn infer_change_purpose(files: &[coderabbit_shared::FileChange]) -> String {
-    if files.iter().any(|f| f.path.to_lowercase().contains("fix") || f.path.to_lowercase().contains("bug")) {
+    if files
+        .iter()
+        .any(|f| f.path.to_lowercase().contains("fix") || f.path.to_lowercase().contains("bug"))
+    {
         "bug fixes or issue resolution".to_string()
     } else if files.iter().any(|f| f.path.to_lowercase().contains("test")) {
         "improving test coverage".to_string()
     } else if files.len() == 1 && files[0].path.ends_with(".md") {
         "documentation updates".to_string()
-    } else if files.iter().any(|f| f.path.contains("config") || f.path.ends_with(".yaml")) {
+    } else if files
+        .iter()
+        .any(|f| f.path.contains("config") || f.path.ends_with(".yaml"))
+    {
         "configuration changes".to_string()
     } else {
         "feature development or enhancements".to_string()
@@ -421,17 +492,17 @@ fn infer_change_intent(files: &[coderabbit_shared::FileChange]) -> String {
 }
 
 fn assess_security_risk(files: &[coderabbit_shared::FileChange]) -> &'static str {
-    let has_auth = files.iter().any(|f|
-        f.path.to_lowercase().contains("auth") ||
-        f.path.to_lowercase().contains("login") ||
-        f.path.to_lowercase().contains("token")
-    );
+    let has_auth = files.iter().any(|f| {
+        f.path.to_lowercase().contains("auth")
+            || f.path.to_lowercase().contains("login")
+            || f.path.to_lowercase().contains("token")
+    });
 
-    let has_data = files.iter().any(|f|
-        f.path.to_lowercase().contains("database") ||
-        f.path.to_lowercase().contains("model") ||
-        f.path.to_lowercase().contains("data")
-    );
+    let has_data = files.iter().any(|f| {
+        f.path.to_lowercase().contains("database")
+            || f.path.to_lowercase().contains("model")
+            || f.path.to_lowercase().contains("data")
+    });
 
     if has_auth {
         "potentially elevated (authentication changes)"
@@ -443,16 +514,13 @@ fn assess_security_risk(files: &[coderabbit_shared::FileChange]) -> &'static str
 }
 
 fn assess_performance_impact(files: &[coderabbit_shared::FileChange]) -> String {
-    let has_db = files.iter().any(|f|
-        f.path.to_lowercase().contains("database") ||
-        f.path.to_lowercase().contains("query")
-    );
+    let has_db = files.iter().any(|f| {
+        f.path.to_lowercase().contains("database") || f.path.to_lowercase().contains("query")
+    });
 
-    let has_loop = files.iter().any(|f|
-        f.content.contains("for ") ||
-        f.content.contains("while ") ||
-        f.content.contains(".iter()")
-    );
+    let has_loop = files.iter().any(|f| {
+        f.content.contains("for ") || f.content.contains("while ") || f.content.contains(".iter()")
+    });
 
     if has_db && has_loop {
         "Potential performance considerations with database operations in loops. Consider query optimization.".to_string()

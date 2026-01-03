@@ -2,7 +2,6 @@
 ///
 /// This module provides efficient caching of cloned repositories to avoid
 /// repeated cloning operations. Uses LRU eviction with TTL-based expiration.
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -108,7 +107,8 @@ impl RepositoryCache {
             head_sha
         };
 
-        format!("{}_{}_{}_{}",
+        format!(
+            "{}_{}_{}_{}",
             owner.replace('/', "_"),
             repo.replace('/', "_"),
             pr_number,
@@ -151,11 +151,7 @@ impl RepositoryCache {
         if let Some(cached_repo) = self.cache_index.get_mut(key) {
             cached_repo.last_accessed = SystemTime::now();
 
-            tracing::info!(
-                "Cache hit: {} (age: {}h)",
-                key,
-                age_hours
-            );
+            tracing::info!("Cache hit: {} (age: {}h)", key, age_hours);
 
             Some(cached_repo.path.clone())
         } else {
@@ -456,9 +452,7 @@ impl RepositoryCache {
                             .await
                             .map_err(|e| format!("Failed to read metadata: {}", e))?;
 
-                        let cached_at = metadata
-                            .modified()
-                            .unwrap_or_else(|_| SystemTime::now());
+                        let cached_at = metadata.modified().unwrap_or_else(|_| SystemTime::now());
 
                         let size_bytes = self.calculate_size(&path).await?;
 

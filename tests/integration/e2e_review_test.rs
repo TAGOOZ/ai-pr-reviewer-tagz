@@ -1,5 +1,5 @@
 //! End-to-End Review Process Test
-//! 
+//!
 //! This tests the complete review workflow:
 //! 1. Fetch PR from GitHub
 //! 2. Queue review job
@@ -15,13 +15,13 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use coderabbit_api_gateway::helpers::git_client::GitHubClient;
-    use coderabbit_orchestrator::{RedisOrchestrator, JobType};
-    use coderabbit_cache_layer::{CacheLayer, l1_cache::L1Cache};
+    use coderabbit_cache_layer::{l1_cache::L1Cache, CacheLayer};
+    use coderabbit_orchestrator::{JobType, RedisOrchestrator};
     use coderabbit_security::sandbox::SecurityManager;
-    use tempfile::TempDir;
+    use std::sync::Arc;
     use std::time::Duration;
+    use tempfile::TempDir;
 
     #[tokio::test]
     #[ignore] // Run with: cargo test -- --ignored
@@ -32,7 +32,7 @@ mod tests {
         // Step 1: Verify GitHub API access
         println!("📋 Step 1: Fetching PR from GitHub");
         println!("-----------------------------------");
-        
+
         let github_token = std::env::var("GITHUB_TOKEN").ok();
         if github_token.is_none() {
             println!("⚠️  GITHUB_TOKEN not set - skipping test");
@@ -40,11 +40,9 @@ mod tests {
         }
 
         let github_client = GitHubClient::new(github_token);
-        
-        let owner = std::env::var("TEST_GITHUB_OWNER")
-            .unwrap_or_else(|_| "rust-lang".to_string());
-        let repo = std::env::var("TEST_GITHUB_REPO")
-            .unwrap_or_else(|_| "rust".to_string());
+
+        let owner = std::env::var("TEST_GITHUB_OWNER").unwrap_or_else(|_| "rust-lang".to_string());
+        let repo = std::env::var("TEST_GITHUB_REPO").unwrap_or_else(|_| "rust".to_string());
         let pr_number: u32 = std::env::var("TEST_GITHUB_PR")
             .unwrap_or_else(|_| "114183".to_string())
             .parse()
@@ -69,7 +67,7 @@ mod tests {
         // Step 2: Initialize cache
         println!("\n📋 Step 2: Initializing Cache Layer");
         println!("------------------------------------");
-        
+
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let cache = match L1Cache::new(temp_dir.path().to_str().unwrap()).await {
             Ok(c) => {
@@ -108,11 +106,14 @@ mod tests {
             "files_count": files.len(),
         });
 
-        let job_id = match orchestrator.enqueue_job(
-            JobType::ReviewRequest,
-            payload.to_string(),
-            5 // medium priority
-        ).await {
+        let job_id = match orchestrator
+            .enqueue_job(
+                JobType::ReviewRequest,
+                payload.to_string(),
+                5, // medium priority
+            )
+            .await
+        {
             Ok(id) => {
                 println!("   ✅ Job queued: {}", id);
                 id
@@ -135,7 +136,10 @@ mod tests {
                 "size": file.content.len(),
             });
 
-            if let Err(e) = cache.set(&cache_key, &metadata, Duration::from_secs(3600)).await {
+            if let Err(e) = cache
+                .set(&cache_key, &metadata, Duration::from_secs(3600))
+                .await
+            {
                 println!("   ⚠️  Cache warning: {}", e);
             }
         }
@@ -209,7 +213,11 @@ mod tests {
         println!("\n✅ End-to-End Test Complete!");
         println!("============================");
         println!("\n📊 Test Summary:");
-        println!("   ✅ GitHub API: Fetched {} files from PR #{}", files.len(), pr_number);
+        println!(
+            "   ✅ GitHub API: Fetched {} files from PR #{}",
+            files.len(),
+            pr_number
+        );
         println!("   ✅ Orchestrator: Job {} queued successfully", job_id);
         println!("   ✅ Cache: File metadata stored and retrieved");
         println!("   ✅ Security: Manager initialized");
@@ -229,7 +237,10 @@ mod tests {
         }
 
         let client = GitHubClient::new(github_token);
-        let files = client.fetch_pr_files("rust-lang", "rust", 114183).await.unwrap();
+        let files = client
+            .fetch_pr_files("rust-lang", "rust", 114183)
+            .await
+            .unwrap();
 
         let mut lang_counts = std::collections::HashMap::new();
         for file in &files {

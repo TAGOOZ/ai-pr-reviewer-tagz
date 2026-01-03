@@ -2,7 +2,6 @@
 ///
 /// This module provides severity-based ranking, priority calculation,
 /// and filtering based on repository configuration.
-
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
@@ -184,7 +183,11 @@ impl RankedIssue {
     }
 
     /// Calculate priority score based on severity, category, and confidence
-    pub fn calculate_priority(severity: IssueSeverity, category: &IssueCategory, confidence: f32) -> u32 {
+    pub fn calculate_priority(
+        severity: IssueSeverity,
+        category: &IssueCategory,
+        confidence: f32,
+    ) -> u32 {
         // Base calculation: severity (0-4) * 100 + category priority (0-100)
         let base = (severity.value() as u32 * 100) + category.base_priority() as u32;
 
@@ -196,11 +199,8 @@ impl RankedIssue {
 
     /// Update priority score
     pub fn recalculate_priority(&mut self) {
-        self.priority_score = Self::calculate_priority(
-            self.severity,
-            &self.category,
-            self.confidence,
-        );
+        self.priority_score =
+            Self::calculate_priority(self.severity, &self.category, self.confidence);
     }
 
     /// Check if issue meets minimum severity threshold
@@ -226,10 +226,14 @@ impl PartialOrd for RankedIssue {
 impl Ord for RankedIssue {
     fn cmp(&self, other: &Self) -> Ordering {
         // Higher priority first, then by severity, then by confidence
-        other.priority_score.cmp(&self.priority_score)
+        other
+            .priority_score
+            .cmp(&self.priority_score)
             .then_with(|| other.severity.cmp(&self.severity))
             .then_with(|| {
-                other.confidence.partial_cmp(&self.confidence)
+                other
+                    .confidence
+                    .partial_cmp(&self.confidence)
                     .unwrap_or(Ordering::Equal)
             })
     }
@@ -283,13 +287,21 @@ impl IssueFilter {
         }
 
         // Check blocked categories
-        if self.blocked_categories.iter().any(|cat| cat == &issue.category) {
+        if self
+            .blocked_categories
+            .iter()
+            .any(|cat| cat == &issue.category)
+        {
             return false;
         }
 
         // Check allowed categories (if specified)
         if !self.allowed_categories.is_empty() {
-            if !self.allowed_categories.iter().any(|cat| cat == &issue.category) {
+            if !self
+                .allowed_categories
+                .iter()
+                .any(|cat| cat == &issue.category)
+            {
                 return false;
             }
         }
@@ -348,9 +360,15 @@ mod tests {
 
     #[test]
     fn test_severity_parsing() {
-        assert_eq!(IssueSeverity::from_str("critical"), Some(IssueSeverity::Critical));
+        assert_eq!(
+            IssueSeverity::from_str("critical"),
+            Some(IssueSeverity::Critical)
+        );
         assert_eq!(IssueSeverity::from_str("error"), Some(IssueSeverity::Error));
-        assert_eq!(IssueSeverity::from_str("warning"), Some(IssueSeverity::Warning));
+        assert_eq!(
+            IssueSeverity::from_str("warning"),
+            Some(IssueSeverity::Warning)
+        );
         assert_eq!(IssueSeverity::from_str("info"), Some(IssueSeverity::Info));
         assert_eq!(IssueSeverity::from_str("debug"), Some(IssueSeverity::Debug));
         assert_eq!(IssueSeverity::from_str("unknown"), None);
@@ -359,29 +377,20 @@ mod tests {
     #[test]
     fn test_priority_calculation() {
         // Critical security issue should have highest priority
-        let priority = RankedIssue::calculate_priority(
-            IssueSeverity::Critical,
-            &IssueCategory::Security,
-            1.0,
-        );
+        let priority =
+            RankedIssue::calculate_priority(IssueSeverity::Critical, &IssueCategory::Security, 1.0);
         assert_eq!(priority, 500); // (4 * 100) + 100
 
         // Info style issue should have low priority
-        let priority = RankedIssue::calculate_priority(
-            IssueSeverity::Info,
-            &IssueCategory::Style,
-            1.0,
-        );
+        let priority =
+            RankedIssue::calculate_priority(IssueSeverity::Info, &IssueCategory::Style, 1.0);
         assert_eq!(priority, 110); // (1 * 100) + 10
     }
 
     #[test]
     fn test_priority_with_confidence() {
-        let priority = RankedIssue::calculate_priority(
-            IssueSeverity::Error,
-            &IssueCategory::Security,
-            0.5,
-        );
+        let priority =
+            RankedIssue::calculate_priority(IssueSeverity::Error, &IssueCategory::Security, 0.5);
         // (3 * 100 + 100) * 0.5 = 200
         assert_eq!(priority, 200);
     }
@@ -468,9 +477,30 @@ mod tests {
     #[test]
     fn test_issue_filter_max_count() {
         let issues = vec![
-            RankedIssue::new("1".to_string(), IssueSeverity::Error, IssueCategory::Security, "1".to_string(), "".to_string(), "f.rs".to_string()),
-            RankedIssue::new("2".to_string(), IssueSeverity::Warning, IssueCategory::Style, "2".to_string(), "".to_string(), "f.rs".to_string()),
-            RankedIssue::new("3".to_string(), IssueSeverity::Info, IssueCategory::Documentation, "3".to_string(), "".to_string(), "f.rs".to_string()),
+            RankedIssue::new(
+                "1".to_string(),
+                IssueSeverity::Error,
+                IssueCategory::Security,
+                "1".to_string(),
+                "".to_string(),
+                "f.rs".to_string(),
+            ),
+            RankedIssue::new(
+                "2".to_string(),
+                IssueSeverity::Warning,
+                IssueCategory::Style,
+                "2".to_string(),
+                "".to_string(),
+                "f.rs".to_string(),
+            ),
+            RankedIssue::new(
+                "3".to_string(),
+                IssueSeverity::Info,
+                IssueCategory::Documentation,
+                "3".to_string(),
+                "".to_string(),
+                "f.rs".to_string(),
+            ),
         ];
 
         let mut filter = IssueFilter::default();
@@ -485,9 +515,30 @@ mod tests {
     #[test]
     fn test_issue_filter_category() {
         let issues = vec![
-            RankedIssue::new("1".to_string(), IssueSeverity::Warning, IssueCategory::Security, "1".to_string(), "".to_string(), "f.rs".to_string()),
-            RankedIssue::new("2".to_string(), IssueSeverity::Warning, IssueCategory::Style, "2".to_string(), "".to_string(), "f.rs".to_string()),
-            RankedIssue::new("3".to_string(), IssueSeverity::Warning, IssueCategory::Performance, "3".to_string(), "".to_string(), "f.rs".to_string()),
+            RankedIssue::new(
+                "1".to_string(),
+                IssueSeverity::Warning,
+                IssueCategory::Security,
+                "1".to_string(),
+                "".to_string(),
+                "f.rs".to_string(),
+            ),
+            RankedIssue::new(
+                "2".to_string(),
+                IssueSeverity::Warning,
+                IssueCategory::Style,
+                "2".to_string(),
+                "".to_string(),
+                "f.rs".to_string(),
+            ),
+            RankedIssue::new(
+                "3".to_string(),
+                IssueSeverity::Warning,
+                IssueCategory::Performance,
+                "3".to_string(),
+                "".to_string(),
+                "f.rs".to_string(),
+            ),
         ];
 
         let mut filter = IssueFilter::default();

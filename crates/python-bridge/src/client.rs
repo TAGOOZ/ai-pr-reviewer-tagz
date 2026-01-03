@@ -1,12 +1,11 @@
 ///! HTTP client for communicating with Python AI services
 ///! Uses shared memory and MessagePack for efficient large payload transfer
-
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::json;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Client for Python embedding service
 pub struct EmbeddingClient {
@@ -35,27 +34,38 @@ impl EmbeddingClient {
 
     /// Generate embeddings for a batch of code snippets
     pub async fn generate_embeddings(&self, code_snippets: Vec<String>) -> Result<Vec<Vec<f32>>> {
-        info!("Generating embeddings for {} code snippets", code_snippets.len());
+        info!(
+            "Generating embeddings for {} code snippets",
+            code_snippets.len()
+        );
 
         // Create shared memory path
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis();
-        let shm_path = self.shared_memory_dir.join(format!("embeddings_{}.msgpack", timestamp));
+        let shm_path = self
+            .shared_memory_dir
+            .join(format!("embeddings_{}.msgpack", timestamp));
 
         // Serialize code snippets to MessagePack
-        let data = rmp_serde::to_vec(&code_snippets)
-            .context("Failed to serialize code snippets")?;
+        let data =
+            rmp_serde::to_vec(&code_snippets).context("Failed to serialize code snippets")?;
 
         // Write to shared memory
-        fs::write(&shm_path, &data).await
+        fs::write(&shm_path, &data)
+            .await
             .context("Failed to write to shared memory")?;
 
-        debug!("Wrote {} bytes to shared memory: {:?}", data.len(), shm_path);
+        debug!(
+            "Wrote {} bytes to shared memory: {:?}",
+            data.len(),
+            shm_path
+        );
 
         // Call Python service
         let url = format!("{}/bridge/embedding_batch", self.base_url);
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&json!({
                 "shared_memory_path": shm_path.to_str().unwrap(),
@@ -76,17 +86,19 @@ impl EmbeddingClient {
             .context("Missing response_path in response")?;
 
         // Read embeddings from shared memory response
-        let response_data = fs::read(response_path).await
+        let response_data = fs::read(response_path)
+            .await
             .context("Failed to read embedding response")?;
 
-        let embeddings: Vec<Vec<f32>> = rmp_serde::from_slice(&response_data)
-            .context("Failed to deserialize embeddings")?;
+        let embeddings: Vec<Vec<f32>> =
+            rmp_serde::from_slice(&response_data).context("Failed to deserialize embeddings")?;
 
         // Clean up shared memory files
         let _ = fs::remove_file(&shm_path).await;
         let _ = fs::remove_file(response_path).await;
 
-        info!("Generated {} embeddings of dimension {}",
+        info!(
+            "Generated {} embeddings of dimension {}",
             embeddings.len(),
             embeddings.first().map(|e| e.len()).unwrap_or(0)
         );
@@ -97,7 +109,9 @@ impl EmbeddingClient {
     /// Generate embedding for a single code snippet
     pub async fn generate_single_embedding(&self, code: String) -> Result<Vec<f32>> {
         let embeddings = self.generate_embeddings(vec![code]).await?;
-        embeddings.into_iter().next()
+        embeddings
+            .into_iter()
+            .next()
             .context("No embedding returned")
     }
 }
@@ -135,21 +149,28 @@ impl AnalysisClient {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis();
-        let shm_path = self.shared_memory_dir.join(format!("analysis_{}.msgpack", timestamp));
+        let shm_path = self
+            .shared_memory_dir
+            .join(format!("analysis_{}.msgpack", timestamp));
 
         // Serialize files to MessagePack
-        let data = rmp_serde::to_vec(&files)
-            .context("Failed to serialize files")?;
+        let data = rmp_serde::to_vec(&files).context("Failed to serialize files")?;
 
         // Write to shared memory
-        fs::write(&shm_path, &data).await
+        fs::write(&shm_path, &data)
+            .await
             .context("Failed to write to shared memory")?;
 
-        debug!("Wrote {} bytes to shared memory: {:?}", data.len(), shm_path);
+        debug!(
+            "Wrote {} bytes to shared memory: {:?}",
+            data.len(),
+            shm_path
+        );
 
         // Call Python service
         let url = format!("{}/bridge/analysis_file_batch", self.base_url);
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&json!({
                 "shared_memory_path": shm_path.to_str().unwrap(),
@@ -199,13 +220,11 @@ mod tests {
     async fn test_analysis_client() {
         let client = AnalysisClient::new("http://localhost:8081".to_string()).unwrap();
 
-        let files = vec![
-            json!({
-                "path": "test.py",
-                "content": "def hello():\n    print('Hello')",
-                "language": "python"
-            })
-        ];
+        let files = vec![json!({
+            "path": "test.py",
+            "content": "def hello():\n    print('Hello')",
+            "language": "python"
+        })];
 
         let result = client.analyze_files(files).await.unwrap();
 

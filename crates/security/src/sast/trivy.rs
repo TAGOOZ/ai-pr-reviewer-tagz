@@ -2,13 +2,12 @@
 ///
 /// Trivy is a comprehensive scanner for vulnerabilities in container images,
 /// file systems, git repositories, misconfigurations, and secrets.
-
 use super::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::path::Path;
-use tokio::process::Command;
 use std::time::Instant;
+use tokio::process::Command;
 
 pub struct TrivyScanner {
     /// Path to trivy executable
@@ -23,9 +22,7 @@ impl TrivyScanner {
     }
 
     pub fn with_path(path: String) -> Self {
-        Self {
-            trivy_path: path,
-        }
+        Self { trivy_path: path }
     }
 }
 
@@ -93,7 +90,7 @@ impl SastScanner for TrivyScanner {
         // Run trivy
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(config.timeout_seconds),
-            Command::new(&self.trivy_path).args(&args).output()
+            Command::new(&self.trivy_path).args(&args).output(),
         )
         .await
         .map_err(|_| "Trivy scan timed out".to_string())?
@@ -172,7 +169,8 @@ impl SastScanner for TrivyScanner {
 
                         let pkg_name = vuln["PkgName"].as_str().unwrap_or("unknown");
                         let installed_version = vuln["InstalledVersion"].as_str().unwrap_or("");
-                        let fixed_version = vuln["FixedVersion"].as_str().unwrap_or("Not available");
+                        let fixed_version =
+                            vuln["FixedVersion"].as_str().unwrap_or("Not available");
 
                         let finding = SastFinding {
                             id: format!("trivy-vuln-{}-{}", vuln_id, finding_id),
@@ -232,10 +230,7 @@ impl SastScanner for TrivyScanner {
                 // Parse secrets
                 if let Some(secrets) = result["Secrets"].as_array() {
                     for secret in secrets {
-                        let rule_id = secret["RuleID"]
-                            .as_str()
-                            .unwrap_or("unknown")
-                            .to_string();
+                        let rule_id = secret["RuleID"].as_str().unwrap_or("unknown").to_string();
 
                         let finding = SastFinding {
                             id: format!("trivy-secret-{}-{}", rule_id, finding_id),
@@ -254,7 +249,10 @@ impl SastScanner for TrivyScanner {
                             cwe_id: Some("CWE-798".to_string()),
                             cve_id: None,
                             owasp_category: Some("A07:2021".to_string()),
-                            remediation: Some("Remove hardcoded secrets and use environment variables".to_string()),
+                            remediation: Some(
+                                "Remove hardcoded secrets and use environment variables"
+                                    .to_string(),
+                            ),
                             references: vec![],
                             confidence: 0.9,
                             metadata: {
@@ -272,10 +270,8 @@ impl SastScanner for TrivyScanner {
                 // Parse misconfigurations
                 if let Some(misconfigs) = result["Misconfigurations"].as_array() {
                     for misconfig in misconfigs {
-                        let misconfig_id = misconfig["ID"]
-                            .as_str()
-                            .unwrap_or("unknown")
-                            .to_string();
+                        let misconfig_id =
+                            misconfig["ID"].as_str().unwrap_or("unknown").to_string();
 
                         let severity_str = misconfig["Severity"].as_str().unwrap_or("MEDIUM");
                         let severity = match severity_str {
@@ -290,7 +286,10 @@ impl SastScanner for TrivyScanner {
                             id: format!("trivy-misconfig-{}-{}", misconfig_id, finding_id),
                             tool: SastTool::Trivy,
                             severity,
-                            title: misconfig["Title"].as_str().unwrap_or(&misconfig_id).to_string(),
+                            title: misconfig["Title"]
+                                .as_str()
+                                .unwrap_or(&misconfig_id)
+                                .to_string(),
                             description: format!(
                                 "{}\n\nType: {}",
                                 misconfig["Description"].as_str().unwrap_or(""),
@@ -310,9 +309,7 @@ impl SastScanner for TrivyScanner {
                             cwe_id: None,
                             cve_id: None,
                             owasp_category: None,
-                            remediation: misconfig["Resolution"]
-                                .as_str()
-                                .map(|s| s.to_string()),
+                            remediation: misconfig["Resolution"].as_str().map(|s| s.to_string()),
                             references: misconfig["PrimaryURL"]
                                 .as_str()
                                 .map(|s| vec![s.to_string()])

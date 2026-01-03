@@ -1,13 +1,12 @@
 /// Integration test for GitHub PR commenting functionality
 /// Tests posting comments and reviews to real GitHub PRs
-use coderabbit_api_gateway::helpers::git_client::{GitHubClient, ReviewEvent, ReviewComment};
+use coderabbit_api_gateway::helpers::git_client::{GitHubClient, ReviewComment, ReviewEvent};
 
 #[tokio::test]
 #[ignore] // Only run with: cargo test --test pr_commenting_test -- --ignored
 async fn test_post_pr_comment() {
     // Get GitHub token from environment
-    let token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let token = std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     // Test repository - using a test repo or one you have access to
     let owner = "rust-lang";
@@ -28,7 +27,10 @@ This is a test comment from the CodeRabbit AI PR Reviewer integration test.
 
     println!("📝 Posting test comment to PR #{}", pr_number);
 
-    match client.post_comment(&owner, &repo, pr_number, comment_body).await {
+    match client
+        .post_comment(&owner, &repo, pr_number, comment_body)
+        .await
+    {
         Ok(comment_id) => {
             println!("✅ Successfully posted comment with ID: {}", comment_id);
             assert!(comment_id > 0);
@@ -44,8 +46,7 @@ This is a test comment from the CodeRabbit AI PR Reviewer integration test.
 #[ignore] // Only run with: cargo test --test pr_commenting_test -- --ignored
 async fn test_post_pr_review() {
     // Get GitHub token from environment
-    let token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let token = std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     // Test repository
     let owner = "rust-lang";
@@ -70,28 +71,29 @@ async fn test_post_pr_review() {
 *This review was posted automatically by CodeRabbit AI*"#;
 
     // Create line-specific comments
-    let comments = vec![
-        ReviewComment {
-            path: "src/main.rs".to_string(),
-            body: "Consider adding error handling here.".to_string(),
-            line: Some(10),
-            side: Some("RIGHT".to_string()),
-            position: None,
-            start_line: None,
-            start_side: None,
-        },
-    ];
+    let comments = vec![ReviewComment {
+        path: "src/main.rs".to_string(),
+        body: "Consider adding error handling here.".to_string(),
+        line: Some(10),
+        side: Some("RIGHT".to_string()),
+        position: None,
+        start_line: None,
+        start_side: None,
+    }];
 
     println!("📝 Posting test review to PR #{}", pr_number);
 
-    match client.post_review(
-        &owner,
-        &repo,
-        pr_number,
-        review_body,
-        ReviewEvent::Comment, // Use COMMENT instead of APPROVE for testing
-        comments,
-    ).await {
+    match client
+        .post_review(
+            &owner,
+            &repo,
+            pr_number,
+            review_body,
+            ReviewEvent::Comment, // Use COMMENT instead of APPROVE for testing
+            comments,
+        )
+        .await
+    {
         Ok(review_id) => {
             println!("✅ Successfully posted review with ID: {}", review_id);
             assert!(review_id > 0);
@@ -111,8 +113,7 @@ async fn test_post_pr_review() {
 #[tokio::test]
 #[ignore]
 async fn test_post_approval_review() {
-    let token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let token = std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let owner = "rust-lang";
     let repo = "rust";
@@ -135,16 +136,22 @@ async fn test_post_approval_review() {
 
     println!("📝 Posting approval review to PR #{}", pr_number);
 
-    match client.post_review(
-        &owner,
-        &repo,
-        pr_number,
-        review_body,
-        ReviewEvent::Approve,
-        vec![], // No line-specific comments
-    ).await {
+    match client
+        .post_review(
+            &owner,
+            &repo,
+            pr_number,
+            review_body,
+            ReviewEvent::Approve,
+            vec![], // No line-specific comments
+        )
+        .await
+    {
         Ok(review_id) => {
-            println!("✅ Successfully posted approval review with ID: {}", review_id);
+            println!(
+                "✅ Successfully posted approval review with ID: {}",
+                review_id
+            );
             assert!(review_id > 0);
         }
         Err(e) => {
@@ -161,8 +168,7 @@ async fn test_post_approval_review() {
 #[tokio::test]
 #[ignore]
 async fn test_post_changes_requested_review() {
-    let token = std::env::var("GITHUB_TOKEN")
-        .expect("GITHUB_TOKEN environment variable not set");
+    let token = std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN environment variable not set");
 
     let owner = "rust-lang";
     let repo = "rust";
@@ -208,16 +214,22 @@ async fn test_post_changes_requested_review() {
 
     println!("📝 Posting changes requested review to PR #{}", pr_number);
 
-    match client.post_review(
-        &owner,
-        &repo,
-        pr_number,
-        review_body,
-        ReviewEvent::RequestChanges,
-        comments,
-    ).await {
+    match client
+        .post_review(
+            &owner,
+            &repo,
+            pr_number,
+            review_body,
+            ReviewEvent::RequestChanges,
+            comments,
+        )
+        .await
+    {
         Ok(review_id) => {
-            println!("✅ Successfully posted changes requested review with ID: {}", review_id);
+            println!(
+                "✅ Successfully posted changes requested review with ID: {}",
+                review_id
+            );
             assert!(review_id > 0);
         }
         Err(e) => {

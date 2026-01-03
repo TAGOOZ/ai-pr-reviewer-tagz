@@ -4,13 +4,18 @@
 //! CRUD operations for repositories, jobs, and analysis results.
 //! Mock implementation for completing Phase 1.
 
-use axum::{extract::{Path, Query, State}, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::Response,
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{info, error};
+use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::collections::HashMap;
+use tracing::{error, info};
 use uuid::Uuid;
-use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions, Row};
 
 /// Database configuration (mock)
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -85,7 +90,7 @@ pub struct DatabaseState {
 impl DatabaseState {
     pub async fn new(config: DatabaseConfig) -> Self {
         info!("Initializing database state");
-        
+
         let mut repositories = HashMap::new();
         let mut jobs = HashMap::new();
         let analysis_results = HashMap::new();
@@ -104,7 +109,10 @@ impl DatabaseState {
                     Some(p)
                 }
                 Err(e) => {
-                    error!("Failed to connect to SQLite DB: {}. Falling back to in-memory.", e);
+                    error!(
+                        "Failed to connect to SQLite DB: {}. Falling back to in-memory.",
+                        e
+                    );
                     None
                 }
             }
@@ -123,7 +131,10 @@ impl DatabaseState {
         // Create schema when DB is available
         if state.pool.is_some() {
             if let Err(e) = state.init_schema().await {
-                error!("Failed to initialize DB schema: {}. Continuing with in-memory fallback.", e);
+                error!(
+                    "Failed to initialize DB schema: {}. Continuing with in-memory fallback.",
+                    e
+                );
             }
         }
 
@@ -131,7 +142,9 @@ impl DatabaseState {
     }
 
     async fn init_schema(&self) -> Result<(), String> {
-        let Some(pool) = &self.pool else { return Ok(()); };
+        let Some(pool) = &self.pool else {
+            return Ok(());
+        };
 
         // Create tables if not exist
         let queries = [
@@ -190,7 +203,10 @@ impl DatabaseState {
     }
 
     /// Get all repositories for an organization
-    pub async fn get_repositories(&self, organization_id: &str) -> Result<Vec<DatabaseRepository>, String> {
+    pub async fn get_repositories(
+        &self,
+        organization_id: &str,
+    ) -> Result<Vec<DatabaseRepository>, String> {
         info!("Getting repositories for organization {}", organization_id);
 
         if let Some(pool) = &self.pool {
@@ -212,41 +228,57 @@ impl DatabaseState {
                 let platform: String = r.try_get("platform").unwrap_or_default();
                 let platform_id: String = r.try_get("platform_id").unwrap_or_default();
                 let clone_url: Option<String> = r.try_get("clone_url").ok();
-                let default_branch: String = r.try_get("default_branch").unwrap_or_else(|_| "main".to_string());
-                let created_at: String = r.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
-                let updated_at: String = r.try_get("updated_at").unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+                let default_branch: String = r
+                    .try_get("default_branch")
+                    .unwrap_or_else(|_| "main".to_string());
+                let created_at: String = r
+                    .try_get("created_at")
+                    .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+                let updated_at: String = r
+                    .try_get("updated_at")
+                    .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
                 let metadata: String = r.try_get("metadata").unwrap_or_else(|_| "{}".to_string());
 
                 repos.push(DatabaseRepository {
                     id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()),
-                    organization_id: Uuid::parse_str(&organization_id_col).unwrap_or_else(|_| Uuid::nil()),
+                    organization_id: Uuid::parse_str(&organization_id_col)
+                        .unwrap_or_else(|_| Uuid::nil()),
                     name,
                     full_name,
                     platform,
                     platform_id,
                     clone_url,
                     default_branch,
-                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
-                    updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
-                    metadata: serde_json::from_str::<serde_json::Value>(&metadata).unwrap_or_else(|_| json!({})),
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    metadata: serde_json::from_str::<serde_json::Value>(&metadata)
+                        .unwrap_or_else(|_| json!({})),
                 });
             }
             return Ok(repos);
         }
-        
+
         let org_uuid = Uuid::parse_str(organization_id).unwrap_or_default();
-        
-        let repos: Vec<DatabaseRepository> = self.repositories
+
+        let repos: Vec<DatabaseRepository> = self
+            .repositories
             .values()
             .filter(|repo| repo.organization_id == org_uuid)
             .cloned()
             .collect();
-        
+
         Ok(repos)
     }
 
     /// Get a specific repository by ID
-    pub async fn get_repository(&self, repository_id: &str) -> Result<Option<DatabaseRepository>, String> {
+    pub async fn get_repository(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<DatabaseRepository>, String> {
         info!("Getting repository {}", repository_id);
 
         if let Some(pool) = &self.pool {
@@ -267,29 +299,41 @@ impl DatabaseState {
                 let platform: String = r.try_get("platform").unwrap_or_default();
                 let platform_id: String = r.try_get("platform_id").unwrap_or_default();
                 let clone_url: Option<String> = r.try_get("clone_url").ok();
-                let default_branch: String = r.try_get("default_branch").unwrap_or_else(|_| "main".to_string());
-                let created_at: String = r.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
-                let updated_at: String = r.try_get("updated_at").unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+                let default_branch: String = r
+                    .try_get("default_branch")
+                    .unwrap_or_else(|_| "main".to_string());
+                let created_at: String = r
+                    .try_get("created_at")
+                    .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+                let updated_at: String = r
+                    .try_get("updated_at")
+                    .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
                 let metadata: String = r.try_get("metadata").unwrap_or_else(|_| "{}".to_string());
 
                 return Ok(Some(DatabaseRepository {
                     id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()),
-                    organization_id: Uuid::parse_str(&organization_id_col).unwrap_or_else(|_| Uuid::nil()),
+                    organization_id: Uuid::parse_str(&organization_id_col)
+                        .unwrap_or_else(|_| Uuid::nil()),
                     name,
                     full_name,
                     platform,
                     platform_id,
                     clone_url,
                     default_branch,
-                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
-                    updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
-                    metadata: serde_json::from_str::<serde_json::Value>(&metadata).unwrap_or_else(|_| json!({})),
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    metadata: serde_json::from_str::<serde_json::Value>(&metadata)
+                        .unwrap_or_else(|_| json!({})),
                 }));
             } else {
                 return Ok(None);
             }
         }
-        
+
         Ok(self.repositories.get(repository_id).cloned())
     }
 
@@ -324,7 +368,7 @@ impl DatabaseState {
             info!("Created repository {} in DB", repo.full_name);
             return Ok(id);
         }
-        
+
         let repository = DatabaseRepository {
             id,
             organization_id: repo.organization_id,
@@ -333,7 +377,10 @@ impl DatabaseState {
             platform: repo.platform.clone(),
             platform_id: repo.platform_id.clone(),
             clone_url: repo.clone_url.clone(),
-            default_branch: repo.default_branch.clone().unwrap_or_else(|| "main".to_string()),
+            default_branch: repo
+                .default_branch
+                .clone()
+                .unwrap_or_else(|| "main".to_string()),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             metadata: repo.metadata.clone(),
@@ -344,12 +391,17 @@ impl DatabaseState {
     }
 
     /// Get jobs for a repository
-    pub async fn get_jobs(&self, repository_id: &str, limit: Option<i32>) -> Result<Vec<DatabaseJob>, String> {
+    pub async fn get_jobs(
+        &self,
+        repository_id: &str,
+        limit: Option<i32>,
+    ) -> Result<Vec<DatabaseJob>, String> {
         if let Some(pool) = &self.pool {
             let sql = if let Some(limit) = limit {
                 format!("SELECT * FROM jobs WHERE repository_id = ? ORDER BY datetime(created_at) DESC LIMIT {}", limit)
             } else {
-                "SELECT * FROM jobs WHERE repository_id = ? ORDER BY datetime(created_at) DESC".to_string()
+                "SELECT * FROM jobs WHERE repository_id = ? ORDER BY datetime(created_at) DESC"
+                    .to_string()
             };
 
             let rows = sqlx::query(&sql)
@@ -367,7 +419,9 @@ impl DatabaseState {
                 let job_type: String = r.try_get("job_type").unwrap_or_default();
                 let status: String = r.try_get("status").unwrap_or_default();
                 let priority: i64 = r.try_get("priority").unwrap_or(0);
-                let created_at: String = r.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+                let created_at: String = r
+                    .try_get("created_at")
+                    .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
                 let started_at: Option<String> = r.try_get("started_at").ok();
                 let completed_at: Option<String> = r.try_get("completed_at").ok();
                 let progress_percentage: i64 = r.try_get("progress_percentage").unwrap_or(0);
@@ -378,15 +432,26 @@ impl DatabaseState {
 
                 out.push(DatabaseJob {
                     id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()),
-                    organization_id: Uuid::parse_str(&organization_id).unwrap_or_else(|_| Uuid::nil()),
+                    organization_id: Uuid::parse_str(&organization_id)
+                        .unwrap_or_else(|_| Uuid::nil()),
                     repository_id: Uuid::parse_str(&repository_id).unwrap_or_else(|_| Uuid::nil()),
                     pull_request_id: pull_request_id.and_then(|s| Uuid::parse_str(&s).ok()),
                     job_type,
                     status,
                     priority: priority as i32,
-                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
-                    started_at: started_at.map(|s| chrono::DateTime::parse_from_rfc3339(&s).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now())),
-                    completed_at: completed_at.map(|s| chrono::DateTime::parse_from_rfc3339(&s).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now())),
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    started_at: started_at.map(|s| {
+                        chrono::DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .unwrap_or_else(|_| chrono::Utc::now())
+                    }),
+                    completed_at: completed_at.map(|s| {
+                        chrono::DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .unwrap_or_else(|_| chrono::Utc::now())
+                    }),
                     progress_percentage: progress_percentage as i32,
                     current_step,
                     total_steps: total_steps as i32,
@@ -397,21 +462,22 @@ impl DatabaseState {
 
             return Ok(out);
         }
-        
+
         let repo_uuid = Uuid::parse_str(repository_id).unwrap_or_default();
-        
-        let mut jobs: Vec<DatabaseJob> = self.jobs
+
+        let mut jobs: Vec<DatabaseJob> = self
+            .jobs
             .values()
             .filter(|job| job.repository_id == repo_uuid)
             .cloned()
             .collect();
-        
+
         jobs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        
+
         if let Some(limit) = limit {
             jobs.truncate(limit as usize);
         }
-        
+
         Ok(jobs)
     }
 
@@ -443,7 +509,7 @@ impl DatabaseState {
             info!("Created job {} of type {} in DB", id, job.job_type);
             return Ok(id);
         }
-        
+
         let new_job = DatabaseJob {
             id,
             organization_id: job.organization_id,
@@ -467,8 +533,17 @@ impl DatabaseState {
     }
 
     /// Update job status and progress
-    pub async fn update_job_status(&self, job_id: &str, status: &str, progress_percentage: i32, current_step: Option<&str>) -> Result<(), String> {
-        info!("Updating job {} status to {} ({}%)", job_id, status, progress_percentage);
+    pub async fn update_job_status(
+        &self,
+        job_id: &str,
+        status: &str,
+        progress_percentage: i32,
+        current_step: Option<&str>,
+    ) -> Result<(), String> {
+        info!(
+            "Updating job {} status to {} ({}%)",
+            job_id, status, progress_percentage
+        );
 
         if let Some(pool) = &self.pool {
             sqlx::query(
@@ -484,17 +559,20 @@ impl DatabaseState {
             .map_err(|e| e.to_string())?;
             return Ok(());
         }
-        
+
         // In mock implementation, just log the update
         if let Some(step) = current_step {
             info!("Job {} current step: {}", job_id, step);
         }
-        
+
         Ok(())
     }
 
     /// Get analysis results for a job
-    pub async fn get_analysis_results(&self, job_id: &str) -> Result<Vec<DatabaseAnalysisResult>, String> {
+    pub async fn get_analysis_results(
+        &self,
+        job_id: &str,
+    ) -> Result<Vec<DatabaseAnalysisResult>, String> {
         if let Some(pool) = &self.pool {
             let rows = sqlx::query(
                 r#"SELECT id, job_id, file_path, language, content_hash, ast_features, metrics, issues, created_at, metadata FROM analysis_results WHERE job_id = ?"#,
@@ -514,7 +592,9 @@ impl DatabaseState {
                 let ast_features: Option<String> = r.try_get("ast_features").ok();
                 let metrics: Option<String> = r.try_get("metrics").ok();
                 let issues: String = r.try_get("issues").unwrap_or_else(|_| "{}".to_string());
-                let created_at: String = r.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+                let created_at: String = r
+                    .try_get("created_at")
+                    .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
                 let metadata: String = r.try_get("metadata").unwrap_or_else(|_| "{}".to_string());
 
                 out.push(DatabaseAnalysisResult {
@@ -523,21 +603,34 @@ impl DatabaseState {
                     file_path,
                     language,
                     content_hash,
-                    ast_features: ast_features.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
-                    metrics: metrics.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
-                    issues: serde_json::from_str::<serde_json::Value>(&issues).unwrap_or_else(|_| json!({})),
-                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at).map(|dt| dt.with_timezone(&chrono::Utc)).unwrap_or_else(|_| chrono::Utc::now()),
-                    metadata: serde_json::from_str::<serde_json::Value>(&metadata).unwrap_or_else(|_| json!({})),
+                    ast_features: ast_features
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
+                    metrics: metrics
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
+                    issues: serde_json::from_str::<serde_json::Value>(&issues)
+                        .unwrap_or_else(|_| json!({})),
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    metadata: serde_json::from_str::<serde_json::Value>(&metadata)
+                        .unwrap_or_else(|_| json!({})),
                 });
             }
             return Ok(out);
         }
 
-        Ok(self.analysis_results.get(job_id).cloned().unwrap_or_else(Vec::new))
+        Ok(self
+            .analysis_results
+            .get(job_id)
+            .cloned()
+            .unwrap_or_else(Vec::new))
     }
 
     /// Create a new analysis result
-    pub async fn create_analysis_result(&self, result: &CreateAnalysisResultRequest) -> Result<Uuid, String> {
+    pub async fn create_analysis_result(
+        &self,
+        result: &CreateAnalysisResultRequest,
+    ) -> Result<Uuid, String> {
         let id = Uuid::new_v4();
 
         if let Some(pool) = &self.pool {
@@ -562,7 +655,7 @@ impl DatabaseState {
             info!("Created analysis result for job {} in DB", result.job_id);
             return Ok(id);
         }
-        
+
         let _analysis_result = DatabaseAnalysisResult {
             id,
             job_id: result.job_id,
@@ -581,25 +674,32 @@ impl DatabaseState {
     }
 
     /// Get organization statistics
-    pub async fn get_organization_stats(&self, organization_id: &str) -> Result<OrganizationStats, String> {
+    pub async fn get_organization_stats(
+        &self,
+        organization_id: &str,
+    ) -> Result<OrganizationStats, String> {
         if let Some(pool) = &self.pool {
-            let repo_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM repositories WHERE organization_id = ?")
-                .bind(organization_id)
-                .fetch_one(pool)
-                .await
-                .map_err(|e| e.to_string())?;
+            let repo_count: (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM repositories WHERE organization_id = ?")
+                    .bind(organization_id)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
 
-            let job_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs WHERE organization_id = ?")
-                .bind(organization_id)
-                .fetch_one(pool)
-                .await
-                .map_err(|e| e.to_string())?;
+            let job_count: (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM jobs WHERE organization_id = ?")
+                    .bind(organization_id)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
 
-            let completed_jobs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs WHERE organization_id = ? AND status = 'completed'")
-                .bind(organization_id)
-                .fetch_one(pool)
-                .await
-                .map_err(|e| e.to_string())?;
+            let completed_jobs: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM jobs WHERE organization_id = ? AND status = 'completed'",
+            )
+            .bind(organization_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
             return Ok(OrganizationStats {
                 repository_count: repo_count.0,
@@ -610,18 +710,21 @@ impl DatabaseState {
         }
 
         let org_uuid = Uuid::parse_str(organization_id).unwrap_or_default();
-        
-        let repo_count = self.repositories
+
+        let repo_count = self
+            .repositories
             .values()
             .filter(|repo| repo.organization_id == org_uuid)
             .count() as i64;
-            
-        let job_count = self.jobs
+
+        let job_count = self
+            .jobs
             .values()
             .filter(|job| job.organization_id == org_uuid)
             .count() as i64;
-            
-        let completed_jobs = self.jobs
+
+        let completed_jobs = self
+            .jobs
             .values()
             .filter(|job| job.organization_id == org_uuid && job.status == "completed")
             .count() as i64;
@@ -771,15 +874,21 @@ pub async fn update_job_status(
 
     info!("Updating job {} status to {}", job_id, status);
 
-    match state.update_job_status(&job_id, status, progress_percentage, current_step).await {
+    match state
+        .update_job_status(&job_id, status, progress_percentage, current_step)
+        .await
+    {
         Ok(_) => Ok(Response::builder()
             .status(StatusCode::OK)
-            .body(json!({
-                "job_id": job_id,
-                "status": status,
-                "progress_percentage": progress_percentage,
-                "message": "Job status updated successfully"
-            }).to_string())
+            .body(
+                json!({
+                    "job_id": job_id,
+                    "status": status,
+                    "progress_percentage": progress_percentage,
+                    "message": "Job status updated successfully"
+                })
+                .to_string(),
+            )
             .unwrap()),
         Err(e) => {
             error!("Failed to update job status: {}", e);

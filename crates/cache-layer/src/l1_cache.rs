@@ -1,6 +1,6 @@
 use crate::cache::{CacheLayer, CacheStats};
 use async_trait::async_trait;
-use coderabbit_shared::{Result, CodeRabbitError};
+use coderabbit_shared::{CodeRabbitError, Result};
 use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::sync::Arc;
@@ -20,8 +20,9 @@ pub struct L1Cache {
 
 impl L1Cache {
     pub async fn new(path: &str) -> Result<Self> {
-        let db = sled::open(path)
-            .map_err(|e| CodeRabbitError::CacheError(format!("Failed to open Sled database: {}", e)))?;
+        let db = sled::open(path).map_err(|e| {
+            CodeRabbitError::CacheError(format!("Failed to open Sled database: {}", e))
+        })?;
 
         Ok(Self {
             db: Arc::new(db),
@@ -76,14 +77,15 @@ impl CacheLayer for L1Cache {
         match self.db.get(key) {
             Ok(Some(data)) => {
                 // Try to decompress if it's compressed
-        let decompressed_data = if data.len() > 4 && &data[0..4] == b"LZ4\0" {
-            lz4_flex::decompress_size_prepended(&data[4..])
-                .map_err(|_| CodeRabbitError::CacheError("Decompression failed".to_string()))?
-        } else {
-            data.to_vec()
-        };
+                let decompressed_data = if data.len() > 4 && &data[0..4] == b"LZ4\0" {
+                    lz4_flex::decompress_size_prepended(&data[4..]).map_err(|_| {
+                        CodeRabbitError::CacheError("Decompression failed".to_string())
+                    })?
+                } else {
+                    data.to_vec()
+                };
 
-        match bincode::deserialize::<CacheEntry<T>>(&decompressed_data) {
+                match bincode::deserialize::<CacheEntry<T>>(&decompressed_data) {
                     Ok(entry) => {
                         if self.is_expired(entry.expires_at) {
                             // Remove expired entry
@@ -105,7 +107,10 @@ impl CacheLayer for L1Cache {
                 self.update_stats(false).await;
                 Ok(None)
             }
-            Err(e) => Err(CodeRabbitError::CacheError(format!("L1 cache get error: {}", e))),
+            Err(e) => Err(CodeRabbitError::CacheError(format!(
+                "L1 cache get error: {}",
+                e
+            ))),
         }
     }
 
@@ -130,49 +135,59 @@ impl CacheLayer for L1Cache {
             serialized
         };
 
-        self.db.insert(key, data)
+        self.db
+            .insert(key, data)
             .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache set error: {}", e)))?;
 
         Ok(())
     }
 
     async fn delete(&self, key: &str) -> Result<()> {
-        self.db.remove(key)
+        self.db
+            .remove(key)
             .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache delete error: {}", e)))?;
         Ok(())
     }
 
     async fn invalidate(&self, pattern: &str) -> Result<()> {
         // Simple pattern matching for now (prefix-based)
-        let keys_to_remove: Vec<_> = self.db
+        let keys_to_remove: Vec<_> = self
+            .db
             .scan_prefix(pattern)
             .keys()
             .collect::<std::result::Result<Vec<_>, sled::Error>>()
             .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache scan error: {}", e)))?;
 
         for key in keys_to_remove {
-            self.db.remove(key)
-                .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache remove error: {}", e)))?;
+            self.db.remove(key).map_err(|e| {
+                CodeRabbitError::CacheError(format!("L1 cache remove error: {}", e))
+            })?;
         }
 
         Ok(())
     }
 
     async fn exists(&self, key: &str) -> Result<bool> {
-        Ok(self.db.contains_key(key)
+        Ok(self
+            .db
+            .contains_key(key)
             .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache exists error: {}", e)))?)
     }
 
     async fn get_stats(&self) -> Result<CacheStats> {
         let mut stats = self.stats.read().await.clone();
         stats.total_keys = self.db.len() as u64;
-        stats.memory_usage_bytes = self.db.size_on_disk()
-            .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache stats error: {}", e)))? as u64;
+        stats.memory_usage_bytes = self
+            .db
+            .size_on_disk()
+            .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache stats error: {}", e)))?
+            as u64;
         Ok(stats)
     }
 
     async fn clear(&self) -> Result<()> {
-        self.db.clear()
+        self.db
+            .clear()
             .map_err(|e| CodeRabbitError::CacheError(format!("L1 cache clear error: {}", e)))?;
         Ok(())
     }
@@ -185,7 +200,9 @@ mod tests {
 
     async fn create_test_cache() -> (L1Cache, TempDir) {
         let temp_dir = TempDir::new().unwrap();
-        let cache = L1Cache::new(temp_dir.path().to_str().unwrap()).await.unwrap();
+        let cache = L1Cache::new(temp_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
         (cache, temp_dir)
     }
 
@@ -201,7 +218,10 @@ mod tests {
         let (cache, _temp) = create_test_cache().await;
 
         let value = "test_value".to_string();
-        cache.set("test_key", &value, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("test_key", &value, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<String> = cache.get("test_key").await.unwrap();
         assert_eq!(result, Some(value));
@@ -219,7 +239,10 @@ mod tests {
     async fn test_l1_cache_delete() {
         let (cache, _temp) = create_test_cache().await;
 
-        cache.set("key", &"value".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key", &"value".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
         cache.delete("key").await.unwrap();
 
         let result: Option<String> = cache.get("key").await.unwrap();
@@ -230,7 +253,10 @@ mod tests {
     async fn test_l1_cache_exists() {
         let (cache, _temp) = create_test_cache().await;
 
-        cache.set("exists_key", &123, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("exists_key", &123, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         assert!(cache.exists("exists_key").await.unwrap());
         assert!(!cache.exists("nonexistent").await.unwrap());
@@ -240,8 +266,14 @@ mod tests {
     async fn test_l1_cache_clear() {
         let (cache, _temp) = create_test_cache().await;
 
-        cache.set("key1", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("key2", &"value2".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("key2", &"value2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         cache.clear().await.unwrap();
 
@@ -256,7 +288,10 @@ mod tests {
         let (cache, _temp) = create_test_cache().await;
 
         // Set with 1 second TTL
-        cache.set("expired_key", &"value".to_string(), Duration::from_secs(1)).await.unwrap();
+        cache
+            .set("expired_key", &"value".to_string(), Duration::from_secs(1))
+            .await
+            .unwrap();
 
         // Wait for expiration
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -269,9 +304,18 @@ mod tests {
     async fn test_l1_cache_invalidate_pattern() {
         let (cache, _temp) = create_test_cache().await;
 
-        cache.set("user:123", &"data1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("user:456", &"data2".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("post:789", &"data3".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("user:123", &"data1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("user:456", &"data2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("post:789", &"data3".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         cache.invalidate("user:").await.unwrap();
 
@@ -288,7 +332,10 @@ mod tests {
     async fn test_l1_cache_stats() {
         let (cache, _temp) = create_test_cache().await;
 
-        cache.set("key1", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         // Trigger hits and misses
         let _: Option<String> = cache.get("key1").await.unwrap(); // hit
@@ -307,7 +354,10 @@ mod tests {
         // Create large value that should be compressed (> 1024 bytes)
         let large_value = "x".repeat(2000);
 
-        cache.set("large_key", &large_value, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("large_key", &large_value, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<String> = cache.get("large_key").await.unwrap();
         assert_eq!(result, Some(large_value));
@@ -330,7 +380,10 @@ mod tests {
             values: vec![1, 2, 3, 4, 5],
         };
 
-        cache.set("struct_key", &test_data, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("struct_key", &test_data, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<TestStruct> = cache.get("struct_key").await.unwrap();
         assert_eq!(result, Some(test_data));
@@ -340,8 +393,14 @@ mod tests {
     async fn test_l1_cache_multiple_sets_same_key() {
         let (cache, _temp) = create_test_cache().await;
 
-        cache.set("key", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("key", &"value2".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("key", &"value2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<String> = cache.get("key").await.unwrap();
         assert_eq!(result, Some("value2".to_string()));
@@ -356,11 +415,14 @@ mod tests {
         for i in 0..10 {
             let cache_clone = cache.clone();
             let handle = tokio::spawn(async move {
-                cache_clone.set(
-                    &format!("key_{}", i),
-                    &format!("value_{}", i),
-                    Duration::from_secs(60)
-                ).await.unwrap();
+                cache_clone
+                    .set(
+                        &format!("key_{}", i),
+                        &format!("value_{}", i),
+                        Duration::from_secs(60),
+                    )
+                    .await
+                    .unwrap();
             });
             handles.push(handle);
         }

@@ -86,15 +86,12 @@ impl AppConfig {
     pub fn from_env() -> Result<Self, String> {
         Ok(Self {
             server: ServerConfig {
-                host: env::var("API_GATEWAY_HOST")
-                    .unwrap_or_else(|_| "0.0.0.0".to_string()),
+                host: env::var("API_GATEWAY_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
                 port: env::var("API_GATEWAY_PORT")
                     .ok()
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(8080),
-                workers: env::var("SERVER_WORKERS")
-                    .ok()
-                    .and_then(|v| v.parse().ok()),
+                workers: env::var("SERVER_WORKERS").ok().and_then(|v| v.parse().ok()),
             },
             database: DatabaseConfig {
                 url: env::var("DATABASE_URL")
@@ -113,8 +110,7 @@ impl AppConfig {
                     .unwrap_or(30),
             },
             redis: RedisConfig {
-                url: env::var("REDIS_URL")
-                    .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
+                url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string()),
                 pool_size: env::var("REDIS_POOL_SIZE")
                     .ok()
                     .and_then(|v| v.parse().ok())
@@ -127,10 +123,8 @@ impl AppConfig {
             ai: AIConfig {
                 openai_api_key: env::var("OPENAI_API_KEY")
                     .map_err(|_| "OPENAI_API_KEY is required".to_string())?,
-                anthropic_api_key: env::var("ANTHROPIC_API_KEY")
-                    .unwrap_or_default(),
-                default_model: env::var("OPENAI_MODEL")
-                    .unwrap_or_else(|_| "gpt-4".to_string()),
+                anthropic_api_key: env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
+                default_model: env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4".to_string()),
                 max_tokens: env::var("OPENAI_MAX_TOKENS")
                     .ok()
                     .and_then(|v| v.parse().ok())
@@ -165,8 +159,7 @@ impl AppConfig {
                 bitbucket_app_password: env::var("BITBUCKET_APP_PASSWORD").ok(),
             },
             python_service: PythonServiceConfig {
-                host: env::var("PYTHON_SERVER_HOST")
-                    .unwrap_or_else(|_| "localhost".to_string()),
+                host: env::var("PYTHON_SERVER_HOST").unwrap_or_else(|_| "localhost".to_string()),
                 port: env::var("PYTHON_SERVER_PORT")
                     .ok()
                     .and_then(|v| v.parse().ok())
@@ -186,10 +179,8 @@ impl AppConfig {
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(384),
             },
-            environment: env::var("ENVIRONMENT")
-                .unwrap_or_else(|_| "development".to_string()),
-            log_level: env::var("RUST_LOG")
-                .unwrap_or_else(|_| "info".to_string()),
+            environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
+            log_level: env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
         })
     }
 

@@ -14,8 +14,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Load configuration from environment
-    let config = AppConfig::from_env()
-        .map_err(|e| format!("Failed to load configuration: {}", e))?;
+    let config =
+        AppConfig::from_env().map_err(|e| format!("Failed to load configuration: {}", e))?;
 
     tracing::info!("Starting CodeRabbit API Gateway");
     tracing::info!("Environment: {}", config.environment);
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create and start the API gateway
     let gateway = ApiGateway::new(config);
-    
+
     if let Err(e) = gateway.start().await {
         tracing::error!("Failed to start API Gateway: {}", e);
         std::process::exit(1);

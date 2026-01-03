@@ -21,8 +21,17 @@ impl SemanticSearch {
         Ok(())
     }
 
-    pub async fn search_similar_code(&self, query_embedding: &[f32], k: usize, filters: Option<HashMap<String, String>>) -> Result<Vec<SearchResult>> {
-        tracing::info!("Searching for similar code with k={}, filters={:?}", k, filters);
+    pub async fn search_similar_code(
+        &self,
+        query_embedding: &[f32],
+        k: usize,
+        filters: Option<HashMap<String, String>>,
+    ) -> Result<Vec<SearchResult>> {
+        tracing::info!(
+            "Searching for similar code with k={}, filters={:?}",
+            k,
+            filters
+        );
 
         // Use VectorStorage to perform the actual search
         let records = self.storage.query(query_embedding, k, filters).await?;
@@ -59,31 +68,31 @@ impl SemanticSearch {
 
     pub async fn search_by_text(&self, query: &str, k: usize) -> Result<Vec<SearchResult>> {
         tracing::info!("Searching by text query: '{}' with k={}", query, k);
-        
+
         // Generate embedding for the text query
         let embedding = self.generate_query_embedding(query).await?;
-        
+
         // Use vector search with the generated embedding
         self.search_similar_code(&embedding, k, None).await
     }
-    
+
     async fn generate_query_embedding(&self, query: &str) -> Result<Vec<f32>> {
         // Call embedding service
         let embedding_url = std::env::var("EMBEDDING_SERVICE_URL")
             .unwrap_or_else(|_| "http://localhost:8081/embed".to_string());
-        
+
         let client = reqwest::Client::new();
-        
+
         #[derive(serde::Serialize)]
         struct EmbeddingRequest {
             text: String,
         }
-        
+
         #[derive(serde::Deserialize)]
         struct EmbeddingResponse {
             embedding: Vec<f32>,
         }
-        
+
         let response = client
             .post(&embedding_url)
             .json(&EmbeddingRequest {
@@ -92,37 +101,54 @@ impl SemanticSearch {
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to call embedding service: {}", e))?;
-        
-        let data: EmbeddingResponse = response.json().await
+
+        let data: EmbeddingResponse = response
+            .json()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to parse embedding response: {}", e))?;
-        
+
         Ok(data.embedding)
     }
 
-    pub async fn search_related_issues(&self, code_embedding: &[f32], repository_id: &str) -> Result<Vec<SearchResult>> {
+    pub async fn search_related_issues(
+        &self,
+        code_embedding: &[f32],
+        repository_id: &str,
+    ) -> Result<Vec<SearchResult>> {
         let mut filters = HashMap::new();
         filters.insert("repository_id".to_string(), repository_id.to_string());
         filters.insert("type".to_string(), "issue".to_string());
-        
-        self.search_similar_code(code_embedding, 10, Some(filters)).await
+
+        self.search_similar_code(code_embedding, 10, Some(filters))
+            .await
     }
 
-    pub async fn search_similar_patterns(&self, code_embedding: &[f32], language: &str) -> Result<Vec<SearchResult>> {
+    pub async fn search_similar_patterns(
+        &self,
+        code_embedding: &[f32],
+        language: &str,
+    ) -> Result<Vec<SearchResult>> {
         let mut filters = HashMap::new();
         filters.insert("language".to_string(), language.to_string());
         filters.insert("type".to_string(), "pattern".to_string());
-        
-        self.search_similar_code(code_embedding, 5, Some(filters)).await
+
+        self.search_similar_code(code_embedding, 5, Some(filters))
+            .await
     }
 
-    pub async fn hybrid_search(&self, text_query: &str, code_embedding: &[f32], k: usize) -> Result<Vec<SearchResult>> {
+    pub async fn hybrid_search(
+        &self,
+        text_query: &str,
+        code_embedding: &[f32],
+        k: usize,
+    ) -> Result<Vec<SearchResult>> {
         tracing::info!("Performing parallel hybrid search for: '{}'", text_query);
 
         // Handle edge case when k is very small
         if k == 0 {
             return Ok(Vec::new());
         }
-        
+
         let half_k = if k == 1 { 1 } else { k / 2 };
 
         // Run text and vector search in parallel for 2x speedup
@@ -137,23 +163,28 @@ impl SemanticSearch {
 
         // Merge and re-rank results
         let mut combined_results = self.merge_and_rerank(text_results, vector_results, text_query);
-        
+
         // Truncate to requested k
         combined_results.truncate(k);
 
         Ok(combined_results)
     }
-    
-    fn merge_and_rerank(&self, mut text_results: Vec<SearchResult>, mut vector_results: Vec<SearchResult>, _query: &str) -> Vec<SearchResult> {
+
+    fn merge_and_rerank(
+        &self,
+        mut text_results: Vec<SearchResult>,
+        mut vector_results: Vec<SearchResult>,
+        _query: &str,
+    ) -> Vec<SearchResult> {
         // Create a map to deduplicate results
         let mut result_map: HashMap<String, SearchResult> = HashMap::new();
-        
+
         // Add text results with boosted scores
         for (idx, mut result) in text_results.into_iter().enumerate() {
             result.similarity_score = 1.0 - (idx as f32 * 0.1); // Decay score
             result_map.insert(result.id.clone(), result);
         }
-        
+
         // Merge vector results
         for (idx, mut result) in vector_results.into_iter().enumerate() {
             let score = 0.8 - (idx as f32 * 0.08); // Slightly lower base score
@@ -168,13 +199,23 @@ impl SemanticSearch {
 
         // Convert back to vector and sort by score
         let mut results: Vec<SearchResult> = result_map.into_values().collect();
-        results.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        results.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         results
     }
 
     /// Add a code snippet to the vector index
-    pub async fn add_code(&self, id: String, content: String, embedding: Vec<f32>, metadata: HashMap<String, String>) -> Result<()> {
+    pub async fn add_code(
+        &self,
+        id: String,
+        content: String,
+        embedding: Vec<f32>,
+        metadata: HashMap<String, String>,
+    ) -> Result<()> {
         use crate::storage::VectorRecord;
 
         let record = VectorRecord {
@@ -189,7 +230,13 @@ impl SemanticSearch {
     }
 
     /// Update existing code in the vector index
-    pub async fn update_code(&self, id: &str, content: String, embedding: Vec<f32>, metadata: HashMap<String, String>) -> Result<()> {
+    pub async fn update_code(
+        &self,
+        id: &str,
+        content: String,
+        embedding: Vec<f32>,
+        metadata: HashMap<String, String>,
+    ) -> Result<()> {
         use crate::storage::VectorRecord;
 
         let record = VectorRecord {

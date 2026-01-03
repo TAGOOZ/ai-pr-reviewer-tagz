@@ -1,23 +1,23 @@
 use axum::{
-    extract::Request,
-    response::{Response, IntoResponse},
-    http::{StatusCode, HeaderMap},
     body::Body,
+    extract::Request,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
-use tower::{Layer, Service};
-use std::task::{Context, Poll};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use chrono::{Utc, Duration};
 use std::sync::Arc;
+use std::task::{Context, Poll};
+use tower::{Layer, Service};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String,        // Subject (user ID)
-    pub exp: usize,         // Expiration time
-    pub iat: usize,         // Issued at
-    pub role: String,       // User role
-    pub email: String,      // User email
+    pub sub: String,   // Subject (user ID)
+    pub exp: usize,    // Expiration time
+    pub iat: usize,    // Issued at
+    pub role: String,  // User role
+    pub email: String, // User email
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,14 +35,18 @@ pub struct AuthContext {
 }
 
 impl AuthContext {
-    pub fn new(jwt_secret: String, token_expiration_hours: i64, refresh_token_expiration_days: i64) -> Self {
+    pub fn new(
+        jwt_secret: String,
+        token_expiration_hours: i64,
+        refresh_token_expiration_days: i64,
+    ) -> Self {
         Self {
             jwt_secret: jwt_secret.into_bytes(),
             token_expiration_hours,
             refresh_token_expiration_days,
         }
     }
-    
+
     pub fn from_env() -> Self {
         let jwt_secret = std::env::var("JWT_SECRET")
             .unwrap_or_else(|_| "default-secret-change-in-production".to_string());
@@ -54,8 +58,12 @@ impl AuthContext {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(7);
-        
-        Self::new(jwt_secret, token_expiration_hours, refresh_token_expiration_days)
+
+        Self::new(
+            jwt_secret,
+            token_expiration_hours,
+            refresh_token_expiration_days,
+        )
     }
 }
 
@@ -64,7 +72,7 @@ impl Claims {
         let now = Utc::now();
         let exp = (now + Duration::hours(expiration_hours)).timestamp() as usize;
         let iat = now.timestamp() as usize;
-        
+
         Self {
             sub: user_id,
             exp,
@@ -73,30 +81,41 @@ impl Claims {
             email,
         }
     }
-    
+
     pub fn is_expired(&self) -> bool {
         let now = Utc::now().timestamp() as usize;
         self.exp < now
     }
 }
 
-pub fn generate_token_pair(user_id: String, email: String, role: String, ctx: &AuthContext) -> Result<TokenPair, jsonwebtoken::errors::Error> {
-    let claims = Claims::new(user_id.clone(), email.clone(), role.clone(), ctx.token_expiration_hours);
+pub fn generate_token_pair(
+    user_id: String,
+    email: String,
+    role: String,
+    ctx: &AuthContext,
+) -> Result<TokenPair, jsonwebtoken::errors::Error> {
+    let claims = Claims::new(
+        user_id.clone(),
+        email.clone(),
+        role.clone(),
+        ctx.token_expiration_hours,
+    );
     let access_token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(&ctx.jwt_secret)
+        &EncodingKey::from_secret(&ctx.jwt_secret),
     )?;
-    
+
     // Refresh token with longer expiration
     let mut refresh_claims = Claims::new(user_id, email, role, ctx.token_expiration_hours);
-    refresh_claims.exp = (Utc::now() + Duration::days(ctx.refresh_token_expiration_days)).timestamp() as usize;
+    refresh_claims.exp =
+        (Utc::now() + Duration::days(ctx.refresh_token_expiration_days)).timestamp() as usize;
     let refresh_token = encode(
         &Header::default(),
         &refresh_claims,
-        &EncodingKey::from_secret(&ctx.jwt_secret)
+        &EncodingKey::from_secret(&ctx.jwt_secret),
     )?;
-    
+
     Ok(TokenPair {
         access_token,
         refresh_token,
@@ -104,18 +123,21 @@ pub fn generate_token_pair(user_id: String, email: String, role: String, ctx: &A
     })
 }
 
-pub fn validate_token(token: &str, ctx: &AuthContext) -> Result<Claims, jsonwebtoken::errors::Error> {
+pub fn validate_token(
+    token: &str,
+    ctx: &AuthContext,
+) -> Result<Claims, jsonwebtoken::errors::Error> {
     let validation = Validation::new(Algorithm::HS256);
     let token_data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(&ctx.jwt_secret),
-        &validation
+        &validation,
     )?;
-    
+
     if token_data.claims.is_expired() {
         return Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into());
     }
-    
+
     Ok(token_data.claims)
 }
 
@@ -140,18 +162,18 @@ pub struct AuthLayer {
 
 impl AuthLayer {
     pub fn new(auth_ctx: AuthContext) -> Self {
-        Self { 
+        Self {
             skip_auth: false,
             auth_ctx: Arc::new(auth_ctx),
         }
     }
-    
+
     pub fn from_env() -> Self {
         Self::new(AuthContext::from_env())
     }
-    
+
     pub fn with_skip_auth(auth_ctx: AuthContext, skip_auth: bool) -> Self {
-        Self { 
+        Self {
             skip_auth,
             auth_ctx: Arc::new(auth_ctx),
         }
@@ -162,7 +184,7 @@ impl<S> Layer<S> for AuthLayer {
     type Service = AuthMiddleware<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        AuthMiddleware { 
+        AuthMiddleware {
             inner,
             skip_auth: self.skip_auth,
             auth_ctx: self.auth_ctx.clone(),
@@ -184,7 +206,9 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -194,14 +218,14 @@ where
         let mut inner = self.inner.clone();
         let skip_auth = self.skip_auth;
         let auth_ctx = self.auth_ctx.clone();
-        
+
         Box::pin(async move {
             // Skip authentication if configured (dev mode)
             if skip_auth {
                 tracing::debug!("Authentication skipped (dev mode)");
                 return inner.call(request).await;
             }
-            
+
             // Extract and validate JWT token
             let headers = request.headers();
             match extract_token_from_header(headers) {
@@ -241,11 +265,7 @@ mod tests {
     use super::*;
 
     fn create_test_auth_context() -> AuthContext {
-        AuthContext::new(
-            "test_secret_key_for_testing".to_string(),
-            24,
-            7
-        )
+        AuthContext::new("test_secret_key_for_testing".to_string(), 24, 7)
     }
 
     #[test]
@@ -262,7 +282,7 @@ mod tests {
             "user123".to_string(),
             "test@example.com".to_string(),
             "user".to_string(),
-            24
+            24,
         );
 
         assert_eq!(claims.sub, "user123");
@@ -277,7 +297,7 @@ mod tests {
             "user123".to_string(),
             "test@example.com".to_string(),
             "user".to_string(),
-            24
+            24,
         );
 
         // Set expiration to past
@@ -296,7 +316,7 @@ mod tests {
             "user123".to_string(),
             "test@example.com".to_string(),
             "admin".to_string(),
-            &ctx
+            &ctx,
         );
 
         assert!(result.is_ok());
@@ -313,8 +333,9 @@ mod tests {
             "user456".to_string(),
             "user@example.com".to_string(),
             "user".to_string(),
-            &ctx
-        ).unwrap();
+            &ctx,
+        )
+        .unwrap();
 
         let result = validate_token(&token_pair.access_token, &ctx);
         assert!(result.is_ok());
@@ -341,8 +362,9 @@ mod tests {
             "user789".to_string(),
             "test@example.com".to_string(),
             "user".to_string(),
-            &ctx1
-        ).unwrap();
+            &ctx1,
+        )
+        .unwrap();
 
         // Try to validate with different secret
         let result = validate_token(&token_pair.access_token, &ctx2);
@@ -352,10 +374,7 @@ mod tests {
     #[test]
     fn test_extract_token_from_header_valid() {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            "Bearer test_token_12345".parse().unwrap()
-        );
+        headers.insert("Authorization", "Bearer test_token_12345".parse().unwrap());
 
         let token = extract_token_from_header(&headers);
         assert_eq!(token, Some("test_token_12345".to_string()));
@@ -364,10 +383,7 @@ mod tests {
     #[test]
     fn test_extract_token_from_header_no_bearer() {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            "test_token_12345".parse().unwrap()
-        );
+        headers.insert("Authorization", "test_token_12345".parse().unwrap());
 
         let token = extract_token_from_header(&headers);
         assert_eq!(token, None);
@@ -401,8 +417,9 @@ mod tests {
             "user123".to_string(),
             "test@example.com".to_string(),
             "user".to_string(),
-            &ctx
-        ).unwrap();
+            &ctx,
+        )
+        .unwrap();
 
         // Validate both tokens
         let access_claims = validate_token(&token_pair.access_token, &ctx).unwrap();
@@ -419,8 +436,9 @@ mod tests {
             "admin_user".to_string(),
             "admin@company.com".to_string(),
             "admin".to_string(),
-            &ctx
-        ).unwrap();
+            &ctx,
+        )
+        .unwrap();
 
         let claims = validate_token(&token_pair.access_token, &ctx).unwrap();
 
@@ -437,7 +455,7 @@ mod tests {
             "user123".to_string(),
             "test@example.com".to_string(),
             "user".to_string(),
-            1
+            1,
         );
 
         let json = serde_json::to_string(&claims);

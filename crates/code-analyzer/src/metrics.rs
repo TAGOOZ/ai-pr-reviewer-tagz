@@ -6,8 +6,10 @@ impl MetricsCalculator {
     pub fn calculate_metrics(content: &str, language: &str) -> CodeMetrics {
         let lines_of_code = Self::count_lines_of_code(content);
         let cyclomatic_complexity = Self::calculate_complexity(content, language);
-        let maintainability_index = Self::calculate_maintainability_index(lines_of_code, cyclomatic_complexity);
-        let technical_debt_minutes = Self::estimate_technical_debt(lines_of_code, cyclomatic_complexity);
+        let maintainability_index =
+            Self::calculate_maintainability_index(lines_of_code, cyclomatic_complexity);
+        let technical_debt_minutes =
+            Self::estimate_technical_debt(lines_of_code, cyclomatic_complexity);
 
         CodeMetrics {
             lines_of_code,
@@ -46,7 +48,10 @@ impl MetricsCalculator {
     fn calculate_maintainability_index(loc: u32, complexity: u32) -> f32 {
         // Simplified maintainability index calculation
         let halstead_volume = (loc as f32) * 2.0; // Simplified Halstead volume
-        let mi = 171.0 - 5.2 * (halstead_volume.ln()) - 0.23 * (complexity as f32) - 16.2 * ((loc as f32).ln());
+        let mi = 171.0
+            - 5.2 * (halstead_volume.ln())
+            - 0.23 * (complexity as f32)
+            - 16.2 * ((loc as f32).ln());
         mi.max(0.0).min(100.0)
     }
 

@@ -1,7 +1,7 @@
-use axum::{Json, extract::Path, http::StatusCode};
-use uuid::Uuid;
-use std::time::Instant;
+use axum::{extract::Path, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewStatusResponse {
@@ -26,20 +26,21 @@ pub async fn get_review_status(Path(id): Path<String>) -> (StatusCode, Json<Revi
     let reviews = REVIEWS.read().unwrap();
 
     match reviews.get(&id) {
-        Some(status) => {
-            (StatusCode::OK, Json(status.clone()))
-        }
+        Some(status) => (StatusCode::OK, Json(status.clone())),
         None => {
             // Return default "not found" response
-            (StatusCode::NOT_FOUND, Json(ReviewStatusResponse {
-                review_id: id,
-                status: "not_found".to_string(),
-                progress: 0.0,
-                files_analyzed: 0,
-                issues_found: 0,
-                started_at: None,
-                completed_at: None,
-            }))
+            (
+                StatusCode::NOT_FOUND,
+                Json(ReviewStatusResponse {
+                    review_id: id,
+                    status: "not_found".to_string(),
+                    progress: 0.0,
+                    files_analyzed: 0,
+                    issues_found: 0,
+                    started_at: None,
+                    completed_at: None,
+                }),
+            )
         }
     }
 }
@@ -52,26 +53,35 @@ pub async fn cancel_review(Path(id): Path<String>) -> (StatusCode, Json<serde_js
     match reviews.get_mut(&id) {
         Some(status) => {
             if status.status == "completed" || status.status == "cancelled" {
-                (StatusCode::CONFLICT, Json(serde_json::json!({
-                    "error": "Review already completed or cancelled"
-                })))
+                (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "Review already completed or cancelled"
+                    })),
+                )
             } else {
                 status.status = "cancelled".to_string();
-                (StatusCode::OK, Json(serde_json::json!({
-                    "message": "Review cancelled successfully",
-                    "review_id": id
-                })))
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "message": "Review cancelled successfully",
+                        "review_id": id
+                    })),
+                )
             }
         }
-        None => {
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
                 "error": "Review not found"
-            })))
-        }
+            })),
+        ),
     }
 }
 
-pub async fn create_review(Json(request): Json<serde_json::Value>) -> (StatusCode, Json<serde_json::Value>) {
+pub async fn create_review(
+    Json(request): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
     tracing::info!("Creating review for request: {:?}", request);
 
     let started = Instant::now();
@@ -79,15 +89,23 @@ pub async fn create_review(Json(request): Json<serde_json::Value>) -> (StatusCod
 
     // Store review status
     let mut reviews = REVIEWS.write().unwrap();
-    reviews.insert(review_id.clone(), ReviewStatusResponse {
-        review_id: review_id.clone(),
-        status: "processing".to_string(),
-        progress: 0.0,
-        files_analyzed: 0,
-        issues_found: 0,
-        started_at: Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()),
-        completed_at: None,
-    });
+    reviews.insert(
+        review_id.clone(),
+        ReviewStatusResponse {
+            review_id: review_id.clone(),
+            status: "processing".to_string(),
+            progress: 0.0,
+            files_analyzed: 0,
+            issues_found: 0,
+            started_at: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
+            completed_at: None,
+        },
+    );
     drop(reviews);
 
     // Simulate review processing (in production, this would queue the job)
@@ -106,22 +124,32 @@ pub async fn create_review(Json(request): Json<serde_json::Value>) -> (StatusCod
     (StatusCode::ACCEPTED, response)
 }
 
-pub async fn enqueue_review(Json(request): Json<serde_json::Value>) -> (StatusCode, Json<serde_json::Value>) {
+pub async fn enqueue_review(
+    Json(request): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
     tracing::info!("Enqueueing review request: {:?}", request);
 
     let job_id = Uuid::new_v4().to_string();
 
     // Store review status as queued
     let mut reviews = REVIEWS.write().unwrap();
-    reviews.insert(job_id.clone(), ReviewStatusResponse {
-        review_id: job_id.clone(),
-        status: "queued".to_string(),
-        progress: 0.0,
-        files_analyzed: 0,
-        issues_found: 0,
-        started_at: Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()),
-        completed_at: None,
-    });
+    reviews.insert(
+        job_id.clone(),
+        ReviewStatusResponse {
+            review_id: job_id.clone(),
+            status: "queued".to_string(),
+            progress: 0.0,
+            files_analyzed: 0,
+            issues_found: 0,
+            started_at: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
+            completed_at: None,
+        },
+    );
     drop(reviews);
 
     let response = Json(serde_json::json!({

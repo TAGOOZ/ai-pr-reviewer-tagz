@@ -1,14 +1,17 @@
-use axum::{Json, extract::{Path, Query}, http::StatusCode, Extension};
+use crate::helpers::git_client::{GitHubClient, ReviewComment, ReviewEvent};
+use axum::{
+    extract::{Path, Query},
+    http::StatusCode,
+    Extension, Json,
+};
+use coderabbit_shared::{
+    ApplySuggestionRequest, ApplySuggestionResponse, CodeRabbitError, ComponentImpact,
+    IssueValidationResult, LinkedIssue, PRSummary, PRSummaryRequest, SuggestedChange,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uuid::Uuid;
-use coderabbit_shared::{
-    PRSummary, PRSummaryRequest, ComponentImpact,
-    SuggestedChange, ApplySuggestionRequest, ApplySuggestionResponse,
-    LinkedIssue, IssueValidationResult, CodeRabbitError
-};
-use crate::helpers::git_client::{GitHubClient, ReviewComment, ReviewEvent};
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 pub struct SummaryQueryParams {
@@ -20,20 +23,29 @@ pub async fn generate_pr_summary(
     Path((owner, repo, pr_number)): Path<(String, String, u32)>,
     Query(params): Query<SummaryQueryParams>,
 ) -> std::result::Result<Json<PRSummary>, (StatusCode, Json<serde_json::Value>)> {
-    tracing::info!("Generating summary for PR {}/{} #{}", owner, repo, pr_number);
+    tracing::info!(
+        "Generating summary for PR {}/{} #{}",
+        owner,
+        repo,
+        pr_number
+    );
 
     // Get GitHub token from environment
     let github_token = std::env::var("GITHUB_TOKEN").ok();
     let github_client = GitHubClient::new(github_token);
 
     // Fetch PR files
-    let files = github_client.fetch_pr_files(&owner, &repo, pr_number)
+    let files = github_client
+        .fetch_pr_files(&owner, &repo, pr_number)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch PR files: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to fetch PR files: {}", e)
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to fetch PR files: {}", e)
+                })),
+            )
         })?;
 
     // Calculate diff stats
@@ -69,10 +81,17 @@ pub async fn generate_pr_summary(
         if path_lower.contains("test") {
             *change_categories.entry("tests".to_string()).or_insert(0) += 1;
         } else if path_lower.ends_with(".md") || path_lower.ends_with(".txt") {
-            *change_categories.entry("documentation".to_string()).or_insert(0) += 1;
-        } else if path_lower.ends_with(".yaml") || path_lower.ends_with(".yml")
-            || path_lower.ends_with(".json") || path_lower.ends_with(".toml") {
-            *change_categories.entry("configuration".to_string()).or_insert(0) += 1;
+            *change_categories
+                .entry("documentation".to_string())
+                .or_insert(0) += 1;
+        } else if path_lower.ends_with(".yaml")
+            || path_lower.ends_with(".yml")
+            || path_lower.ends_with(".json")
+            || path_lower.ends_with(".toml")
+        {
+            *change_categories
+                .entry("configuration".to_string())
+                .or_insert(0) += 1;
         } else {
             *change_categories.entry("code".to_string()).or_insert(0) += 1;
         }
@@ -125,9 +144,7 @@ pub async fn generate_pr_summary(
     );
 
     // Generate technical walkthrough
-    let mut walkthrough_parts = vec![
-        "## File Changes".to_string(),
-    ];
+    let mut walkthrough_parts = vec!["## File Changes".to_string()];
 
     for (lang, count) in by_language.iter() {
         walkthrough_parts.push(format!("- **{}**: {} files", lang, count));
@@ -140,7 +157,10 @@ pub async fn generate_pr_summary(
 
     walkthrough_parts.push("\n## Modified Components".to_string());
     for component in &affected_components {
-        walkthrough_parts.push(format!("- **{}**: {}", component.name, component.description));
+        walkthrough_parts.push(format!(
+            "- **{}**: {}",
+            component.name, component.description
+        ));
     }
 
     let technical_walkthrough = walkthrough_parts.join("\n");
@@ -148,11 +168,15 @@ pub async fn generate_pr_summary(
     // Testing recommendations
     let testing_recommendations = vec![
         "Run full test suite to verify no regressions".to_string(),
-        format!("Focus testing on {} components", affected_components.iter()
-            .take(3)
-            .map(|c| c.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ")),
+        format!(
+            "Focus testing on {} components",
+            affected_components
+                .iter()
+                .take(3)
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         "Verify integration points between modified components".to_string(),
         if lines_added > 100 {
             "Add new tests for newly added functionality".to_string()
@@ -186,25 +210,35 @@ pub async fn generate_pr_summary(
 pub async fn get_pr_suggestions(
     Path((owner, repo, pr_number)): Path<(String, String, u32)>,
 ) -> std::result::Result<Json<Vec<SuggestedChange>>, (StatusCode, Json<serde_json::Value>)> {
-    tracing::info!("Getting suggestions for PR {}/{} #{}", owner, repo, pr_number);
+    tracing::info!(
+        "Getting suggestions for PR {}/{} #{}",
+        owner,
+        repo,
+        pr_number
+    );
 
     let github_token = std::env::var("GITHUB_TOKEN").ok();
     let github_client = GitHubClient::new(github_token);
 
     // Fetch PR files
-    let files = github_client.fetch_pr_files(&owner, &repo, pr_number)
+    let files = github_client
+        .fetch_pr_files(&owner, &repo, pr_number)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch PR files: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to fetch PR files: {}", e)
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to fetch PR files: {}", e)
+                })),
+            )
         })?;
 
     let mut suggestions = Vec::new();
 
     // Analyze each file for potential improvements
-    for file in files.iter().take(10) {  // Limit to 10 files for performance
+    for file in files.iter().take(10) {
+        // Limit to 10 files for performance
         // Check for common issues based on language
         match file.language.as_str() {
             "rust" => {
@@ -218,14 +252,17 @@ pub async fn get_pr_suggestions(
                                 start_line: (idx + 1) as u32,
                                 end_line: (idx + 1) as u32,
                                 original_code: line.trim().to_string(),
-                                suggested_code: line.replace(".unwrap()", ".expect(\"descriptive error message\")"),
-                                reason: "Replace .unwrap() with .expect() for better error messages".to_string(),
+                                suggested_code: line
+                                    .replace(".unwrap()", ".expect(\"descriptive error message\")"),
+                                reason:
+                                    "Replace .unwrap() with .expect() for better error messages"
+                                        .to_string(),
                                 category: "best_practice".to_string(),
                             });
                         }
                     }
                 }
-            },
+            }
             "python" => {
                 if file.content.contains("except:") {
                     let lines: Vec<&str> = file.content.lines().collect();
@@ -238,13 +275,14 @@ pub async fn get_pr_suggestions(
                                 end_line: (idx + 1) as u32,
                                 original_code: line.trim().to_string(),
                                 suggested_code: "except Exception as e:".to_string(),
-                                reason: "Catch specific exceptions instead of bare except".to_string(),
+                                reason: "Catch specific exceptions instead of bare except"
+                                    .to_string(),
                                 category: "security".to_string(),
                             });
                         }
                     }
                 }
-            },
+            }
             "javascript" | "typescript" => {
                 if file.content.contains("console.log") {
                     let lines: Vec<&str> = file.content.lines().collect();
@@ -256,14 +294,15 @@ pub async fn get_pr_suggestions(
                                 start_line: (idx + 1) as u32,
                                 end_line: (idx + 1) as u32,
                                 original_code: line.trim().to_string(),
-                                suggested_code: "// Remove console.log before production".to_string(),
+                                suggested_code: "// Remove console.log before production"
+                                    .to_string(),
                                 reason: "Remove debug console.log statements".to_string(),
                                 category: "code_quality".to_string(),
                             });
                         }
                     }
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -276,8 +315,13 @@ pub async fn get_pr_suggestions(
 pub async fn apply_suggestion(
     Json(request): Json<ApplySuggestionRequest>,
 ) -> std::result::Result<Json<ApplySuggestionResponse>, (StatusCode, Json<serde_json::Value>)> {
-    tracing::info!("Applying suggestion {} to PR {}/{}#{}",
-        request.suggestion_id, request.repository_owner, request.repository_name, request.pr_number);
+    tracing::info!(
+        "Applying suggestion {} to PR {}/{}#{}",
+        request.suggestion_id,
+        request.repository_owner,
+        request.repository_name,
+        request.pr_number
+    );
 
     let github_token = std::env::var("GITHUB_TOKEN").ok();
     if github_token.is_none() {
@@ -292,11 +336,14 @@ pub async fn apply_suggestion(
 
     // Fetch the suggestion details (in real implementation, this would come from storage)
     // For now, we'll fetch PR suggestions and find the matching one
-    let suggestions = match github_client.fetch_pr_files(
-        &request.repository_owner,
-        &request.repository_name,
-        request.pr_number
-    ).await {
+    let suggestions = match github_client
+        .fetch_pr_files(
+            &request.repository_owner,
+            &request.repository_name,
+            request.pr_number,
+        )
+        .await
+    {
         Ok(files) => {
             // Generate suggestions for these files to find the one we need
             let mut all_suggestions = Vec::new();
@@ -310,12 +357,15 @@ pub async fn apply_suggestion(
                                     all_suggestions.push((
                                         file.path.clone(),
                                         line.trim().to_string(),
-                                        line.replace(".unwrap()", ".expect(\"descriptive error message\")"),
+                                        line.replace(
+                                            ".unwrap()",
+                                            ".expect(\"descriptive error message\")",
+                                        ),
                                     ));
                                 }
                             }
                         }
-                    },
+                    }
                     "python" => {
                         if file.content.contains("except:") {
                             let lines: Vec<&str> = file.content.lines().collect();
@@ -329,7 +379,7 @@ pub async fn apply_suggestion(
                                 }
                             }
                         }
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -358,21 +408,30 @@ pub async fn apply_suggestion(
 
     // Create commit message
     let commit_message = request.commit_message.unwrap_or_else(|| {
-        format!("Apply CodeRabbit suggestion\n\nApplied suggestion to improve code quality in {}", file_path)
+        format!(
+            "Apply CodeRabbit suggestion\n\nApplied suggestion to improve code quality in {}",
+            file_path
+        )
     });
 
     // Apply the suggestion
-    match github_client.apply_suggestion(
-        &request.repository_owner,
-        &request.repository_name,
-        request.pr_number,
-        file_path,
-        original,
-        suggested,
-        &commit_message,
-    ).await {
+    match github_client
+        .apply_suggestion(
+            &request.repository_owner,
+            &request.repository_name,
+            request.pr_number,
+            file_path,
+            original,
+            suggested,
+            &commit_message,
+        )
+        .await
+    {
         Ok(commit_sha) => {
-            tracing::info!("Successfully applied suggestion, commit SHA: {}", commit_sha);
+            tracing::info!(
+                "Successfully applied suggestion, commit SHA: {}",
+                commit_sha
+            );
             Ok(Json(ApplySuggestionResponse {
                 success: true,
                 commit_sha: Some(commit_sha),
@@ -398,35 +457,50 @@ pub async fn validate_pr_issues(
 
     let github_token = std::env::var("GITHUB_TOKEN").ok();
     if github_token.is_none() {
-        return Err((StatusCode::UNAUTHORIZED, Json(serde_json::json!({
-            "error": "GitHub token not configured"
-        }))));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "GitHub token not configured"
+            })),
+        ));
     }
 
     let client = reqwest::Client::new();
 
     // Fetch PR details
-    let pr_url = format!("https://api.github.com/repos/{}/{}/pulls/{}", owner, repo, pr_number);
+    let pr_url = format!(
+        "https://api.github.com/repos/{}/{}/pulls/{}",
+        owner, repo, pr_number
+    );
 
     let pr_response = client
         .get(&pr_url)
-        .header("Authorization", format!("Bearer {}", github_token.as_ref().unwrap()))
+        .header(
+            "Authorization",
+            format!("Bearer {}", github_token.as_ref().unwrap()),
+        )
         .header("User-Agent", "CodeRabbit-AI")
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch PR: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to fetch PR: {}", e)
-            })))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to fetch PR: {}", e)
+                })),
+            )
         })?;
 
     let pr_data: serde_json::Value = pr_response.json().await.map_err(|e| {
         tracing::error!("Failed to parse PR data: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-            "error": format!("Failed to parse PR data: {}", e)
-        })))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("Failed to parse PR data: {}", e)
+            })),
+        )
     })?;
 
     // Extract linked issues from PR body
@@ -438,11 +512,17 @@ pub async fn validate_pr_issues(
 
     // Fetch each linked issue
     for issue_number in &linked_issue_numbers {
-        let issue_url = format!("https://api.github.com/repos/{}/{}/issues/{}", owner, repo, issue_number);
+        let issue_url = format!(
+            "https://api.github.com/repos/{}/{}/issues/{}",
+            owner, repo, issue_number
+        );
 
         if let Ok(response) = client
             .get(&issue_url)
-            .header("Authorization", format!("Bearer {}", github_token.as_ref().unwrap()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", github_token.as_ref().unwrap()),
+            )
             .header("User-Agent", "CodeRabbit-AI")
             .header("Accept", "application/vnd.github.v3+json")
             .send()
@@ -453,10 +533,13 @@ pub async fn validate_pr_issues(
                     number: *issue_number,
                     title: issue_data["title"].as_str().unwrap_or("").to_string(),
                     state: issue_data["state"].as_str().unwrap_or("").to_string(),
-                    labels: issue_data["labels"].as_array()
-                        .map(|arr| arr.iter()
-                            .filter_map(|l| l["name"].as_str().map(|s| s.to_string()))
-                            .collect())
+                    labels: issue_data["labels"]
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|l| l["name"].as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
                         .unwrap_or_default(),
                     body: issue_data["body"].as_str().unwrap_or("").to_string(),
                 });
@@ -468,12 +551,18 @@ pub async fn validate_pr_issues(
     let mut missing_requirements = Vec::new();
 
     if linked_issues.is_empty() {
-        missing_requirements.push("No linked issues found. Consider linking related issues using 'Fixes #123' syntax.".to_string());
+        missing_requirements.push(
+            "No linked issues found. Consider linking related issues using 'Fixes #123' syntax."
+                .to_string(),
+        );
     }
 
     for issue in &linked_issues {
         if issue.state != "open" {
-            missing_requirements.push(format!("Issue #{} is {}, not open", issue.number, issue.state));
+            missing_requirements.push(format!(
+                "Issue #{} is {}, not open",
+                issue.number, issue.state
+            ));
         }
     }
 
@@ -483,7 +572,8 @@ pub async fn validate_pr_issues(
         "invalid"
     } else {
         "partial"
-    }.to_string();
+    }
+    .to_string();
 
     let result = IssueValidationResult {
         pr_number,

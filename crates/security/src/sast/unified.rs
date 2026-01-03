@@ -1,13 +1,12 @@
+use super::bandit::BanditScanner;
+use super::gitleaks::GitleaksScanner;
+use super::semgrep::SemgrepScanner;
+use super::trivy::TrivyScanner;
 /// Unified SAST scanner that orchestrates multiple security tools
 ///
 /// This module provides a high-level interface for running multiple SAST tools
 /// in parallel and aggregating their results.
-
 use super::*;
-use super::bandit::BanditScanner;
-use super::semgrep::SemgrepScanner;
-use super::gitleaks::GitleaksScanner;
-use super::trivy::TrivyScanner;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -187,7 +186,11 @@ impl UnifiedScanner {
                     failed_tools.push((tool, e));
 
                     if config.fail_fast {
-                        return Err(format!("Scan failed with {:?}: {}", tool, failed_tools.last().unwrap().1));
+                        return Err(format!(
+                            "Scan failed with {:?}: {}",
+                            tool,
+                            failed_tools.last().unwrap().1
+                        ));
                     }
                 }
             }
@@ -204,8 +207,11 @@ impl UnifiedScanner {
 
         // Sort by severity and priority
         all_findings.sort_by(|a, b| {
-            b.severity.cmp(&a.severity)
-                .then_with(|| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal))
+            b.severity.cmp(&a.severity).then_with(|| {
+                b.confidence
+                    .partial_cmp(&a.confidence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
         });
 
         // Calculate unified stats
@@ -239,7 +245,10 @@ impl UnifiedScanner {
         report.push_str("╚════════════════════════════════════════════════════════╝\n\n");
 
         // Summary
-        report.push_str(&format!("Total Findings: {}\n", result.stats.total_findings));
+        report.push_str(&format!(
+            "Total Findings: {}\n",
+            result.stats.total_findings
+        ));
         report.push_str(&format!("  🔥 Critical: {}\n", result.stats.critical_count));
         report.push_str(&format!("  ❌ High:     {}\n", result.stats.high_count));
         report.push_str(&format!("  ⚠️  Medium:   {}\n", result.stats.medium_count));
@@ -248,7 +257,10 @@ impl UnifiedScanner {
 
         report.push_str(&format!("Files Scanned: {}\n", result.stats.unique_files));
         report.push_str(&format!("Tools Run: {}\n", result.stats.tools_succeeded));
-        report.push_str(&format!("Execution Time: {}ms\n\n", result.total_execution_time_ms));
+        report.push_str(&format!(
+            "Execution Time: {}ms\n\n",
+            result.total_execution_time_ms
+        ));
 
         // Tool results
         report.push_str("Tools Executed:\n");

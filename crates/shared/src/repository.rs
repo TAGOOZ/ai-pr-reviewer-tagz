@@ -1,12 +1,11 @@
 ///! Repository management: Clone, checkout PR, manage workspace
 ///! Secure handling of untrusted code repositories
-
-use crate::{Result, CodeRabbitError};
+use crate::{CodeRabbitError, Result};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tokio::fs;
-use tracing::{info, warn, error};
-use serde::{Deserialize, Serialize};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepositoryManager {
@@ -37,7 +36,7 @@ impl Default for RepositoryManager {
     fn default() -> Self {
         Self {
             workspace_root: PathBuf::from("/tmp/coderabbit_repos"),
-            max_repo_size_mb: 1024, // 1GB max
+            max_repo_size_mb: 1024,     // 1GB max
             clone_timeout_seconds: 300, // 5 minutes
         }
     }
@@ -59,7 +58,8 @@ impl RepositoryManager {
         self.validate_repo_url(&options.url)?;
 
         // Create workspace directory
-        fs::create_dir_all(&self.workspace_root).await
+        fs::create_dir_all(&self.workspace_root)
+            .await
             .map_err(|e| CodeRabbitError::IoError(e.to_string()))?;
 
         // Generate unique directory name
@@ -68,8 +68,12 @@ impl RepositoryManager {
 
         // Clean up if exists
         if repo_path.exists() {
-            warn!("Repository path already exists, cleaning up: {:?}", repo_path);
-            fs::remove_dir_all(&repo_path).await
+            warn!(
+                "Repository path already exists, cleaning up: {:?}",
+                repo_path
+            );
+            fs::remove_dir_all(&repo_path)
+                .await
                 .map_err(|e| CodeRabbitError::IoError(e.to_string()))?;
         }
 
@@ -101,7 +105,7 @@ impl RepositoryManager {
         // Execute with timeout
         let output = tokio::time::timeout(
             tokio::time::Duration::from_secs(self.clone_timeout_seconds),
-            tokio::task::spawn_blocking(move || clone_cmd.output())
+            tokio::task::spawn_blocking(move || clone_cmd.output()),
         )
         .await
         .map_err(|_| CodeRabbitError::Timeout("Clone operation timed out".to_string()))?
@@ -111,7 +115,10 @@ impl RepositoryManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             error!("Git clone failed: {}", stderr);
-            return Err(CodeRabbitError::Internal(format!("Git clone failed: {}", stderr)));
+            return Err(CodeRabbitError::Internal(format!(
+                "Git clone failed: {}",
+                stderr
+            )));
         }
 
         // Handle PR checkout if specified
@@ -126,15 +133,22 @@ impl RepositoryManager {
         // Check repository size
         let size_mb = self.calculate_repo_size(&repo_path).await?;
         if size_mb > self.max_repo_size_mb as f64 {
-            error!("Repository size ({:.2}MB) exceeds limit ({}MB)", size_mb, self.max_repo_size_mb);
+            error!(
+                "Repository size ({:.2}MB) exceeds limit ({}MB)",
+                size_mb, self.max_repo_size_mb
+            );
             // Clean up
             let _ = fs::remove_dir_all(&repo_path).await;
-            return Err(CodeRabbitError::ValidationError(
-                format!("Repository size ({:.2}MB) exceeds maximum allowed size ({}MB)", size_mb, self.max_repo_size_mb)
-            ));
+            return Err(CodeRabbitError::ValidationError(format!(
+                "Repository size ({:.2}MB) exceeds maximum allowed size ({}MB)",
+                size_mb, self.max_repo_size_mb
+            )));
         }
 
-        info!("Repository cloned successfully: {:?} ({:.2}MB)", repo_path, size_mb);
+        info!(
+            "Repository cloned successfully: {:?} ({:.2}MB)",
+            repo_path, size_mb
+        );
 
         Ok(ClonedRepository {
             path: repo_path,
@@ -152,13 +166,20 @@ impl RepositoryManager {
         // Fetch PR ref
         let fetch_output = Command::new("git")
             .current_dir(repo_path)
-            .args(&["fetch", "origin", &format!("pull/{}/head:pr-{}", pr_number, pr_number)])
+            .args(&[
+                "fetch",
+                "origin",
+                &format!("pull/{}/head:pr-{}", pr_number, pr_number),
+            ])
             .output()
             .map_err(|e| CodeRabbitError::Internal(format!("Failed to fetch PR: {}", e)))?;
 
         if !fetch_output.status.success() {
             let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-            return Err(CodeRabbitError::Internal(format!("Failed to fetch PR: {}", stderr)));
+            return Err(CodeRabbitError::Internal(format!(
+                "Failed to fetch PR: {}",
+                stderr
+            )));
         }
 
         // Checkout PR branch
@@ -170,7 +191,10 @@ impl RepositoryManager {
 
         if !checkout_output.status.success() {
             let stderr = String::from_utf8_lossy(&checkout_output.stderr);
-            return Err(CodeRabbitError::Internal(format!("Failed to checkout PR: {}", stderr)));
+            return Err(CodeRabbitError::Internal(format!(
+                "Failed to checkout PR: {}",
+                stderr
+            )));
         }
 
         // Get commit SHA
@@ -180,7 +204,11 @@ impl RepositoryManager {
     }
 
     /// Checkout a specific commit
-    async fn checkout_commit(&self, repo_path: &Path, commit_sha: &str) -> Result<(String, String)> {
+    async fn checkout_commit(
+        &self,
+        repo_path: &Path,
+        commit_sha: &str,
+    ) -> Result<(String, String)> {
         info!("Checking out commit: {}", commit_sha);
 
         let output = Command::new("git")
@@ -191,7 +219,10 @@ impl RepositoryManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(CodeRabbitError::Internal(format!("Failed to checkout commit: {}", stderr)));
+            return Err(CodeRabbitError::Internal(format!(
+                "Failed to checkout commit: {}",
+                stderr
+            )));
         }
 
         let branch_name = self.get_current_branch(repo_path)?;
@@ -208,9 +239,13 @@ impl RepositoryManager {
             .current_dir(repo_path)
             .args(&["symbolic-ref", "--short", "HEAD"])
             .output()
-            .map_err(|e| CodeRabbitError::Internal(format!("Failed to get default branch: {}", e)))?;
+            .map_err(|e| {
+                CodeRabbitError::Internal(format!("Failed to get default branch: {}", e))
+            })?;
 
-        let branch_name = String::from_utf8_lossy(&branch_output.stdout).trim().to_string();
+        let branch_name = String::from_utf8_lossy(&branch_output.stdout)
+            .trim()
+            .to_string();
 
         // Checkout default branch
         let checkout_output = Command::new("git")
@@ -221,7 +256,10 @@ impl RepositoryManager {
 
         if !checkout_output.status.success() {
             let stderr = String::from_utf8_lossy(&checkout_output.stderr);
-            return Err(CodeRabbitError::Internal(format!("Failed to checkout branch: {}", stderr)));
+            return Err(CodeRabbitError::Internal(format!(
+                "Failed to checkout branch: {}",
+                stderr
+            )));
         }
 
         let commit_sha = self.get_current_commit(repo_path)?;
@@ -238,7 +276,9 @@ impl RepositoryManager {
             .map_err(|e| CodeRabbitError::Internal(format!("Failed to get commit SHA: {}", e)))?;
 
         if !output.status.success() {
-            return Err(CodeRabbitError::Internal("Failed to get commit SHA".to_string()));
+            return Err(CodeRabbitError::Internal(
+                "Failed to get commit SHA".to_string(),
+            ));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -253,7 +293,9 @@ impl RepositoryManager {
             .map_err(|e| CodeRabbitError::Internal(format!("Failed to get branch name: {}", e)))?;
 
         if !output.status.success() {
-            return Err(CodeRabbitError::Internal("Failed to get branch name".to_string()));
+            return Err(CodeRabbitError::Internal(
+                "Failed to get branch name".to_string(),
+            ));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -264,7 +306,9 @@ impl RepositoryManager {
         let output = Command::new("du")
             .args(&["-sm", repo_path.to_str().unwrap()])
             .output()
-            .map_err(|e| CodeRabbitError::Internal(format!("Failed to calculate repo size: {}", e)))?;
+            .map_err(|e| {
+                CodeRabbitError::Internal(format!("Failed to calculate repo size: {}", e))
+            })?;
 
         if !output.status.success() {
             return Ok(0.0);
@@ -285,14 +329,18 @@ impl RepositoryManager {
         // Check for valid protocol
         if !url.starts_with("https://") && !url.starts_with("git@") {
             return Err(CodeRabbitError::ValidationError(
-                "Only HTTPS and SSH protocols are allowed".to_string()
+                "Only HTTPS and SSH protocols are allowed".to_string(),
             ));
         }
 
         // Block localhost and private IP ranges
-        if url.contains("localhost") || url.contains("127.0.0.1") || url.contains("192.168.") || url.contains("10.") {
+        if url.contains("localhost")
+            || url.contains("127.0.0.1")
+            || url.contains("192.168.")
+            || url.contains("10.")
+        {
             return Err(CodeRabbitError::ValidationError(
-                "Private IP ranges and localhost are not allowed".to_string()
+                "Private IP ranges and localhost are not allowed".to_string(),
             ));
         }
 
@@ -319,15 +367,21 @@ impl RepositoryManager {
         info!("Cleaning up repository: {:?}", repo_path);
 
         if repo_path.exists() {
-            fs::remove_dir_all(repo_path).await
-                .map_err(|e| CodeRabbitError::IoError(format!("Failed to clean up repository: {}", e)))?;
+            fs::remove_dir_all(repo_path).await.map_err(|e| {
+                CodeRabbitError::IoError(format!("Failed to clean up repository: {}", e))
+            })?;
         }
 
         Ok(())
     }
 
     /// Get PR diff
-    pub async fn get_pr_diff(&self, repo_path: &Path, base_branch: &str, pr_branch: &str) -> Result<String> {
+    pub async fn get_pr_diff(
+        &self,
+        repo_path: &Path,
+        base_branch: &str,
+        pr_branch: &str,
+    ) -> Result<String> {
         info!("Getting diff between {} and {}", base_branch, pr_branch);
 
         let output = Command::new("git")
@@ -338,25 +392,37 @@ impl RepositoryManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(CodeRabbitError::Internal(format!("Failed to get diff: {}", stderr)));
+            return Err(CodeRabbitError::Internal(format!(
+                "Failed to get diff: {}",
+                stderr
+            )));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
     /// Get changed files in PR
-    pub async fn get_changed_files(&self, repo_path: &Path, base_branch: &str) -> Result<Vec<String>> {
+    pub async fn get_changed_files(
+        &self,
+        repo_path: &Path,
+        base_branch: &str,
+    ) -> Result<Vec<String>> {
         info!("Getting changed files since {}", base_branch);
 
         let output = Command::new("git")
             .current_dir(repo_path)
             .args(&["diff", "--name-only", &format!("origin/{}", base_branch)])
             .output()
-            .map_err(|e| CodeRabbitError::Internal(format!("Failed to get changed files: {}", e)))?;
+            .map_err(|e| {
+                CodeRabbitError::Internal(format!("Failed to get changed files: {}", e))
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(CodeRabbitError::Internal(format!("Failed to get changed files: {}", stderr)));
+            return Err(CodeRabbitError::Internal(format!(
+                "Failed to get changed files: {}",
+                stderr
+            )));
         }
 
         let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
@@ -378,13 +444,23 @@ mod tests {
         let manager = RepositoryManager::default();
 
         // Valid URLs
-        assert!(manager.validate_repo_url("https://github.com/user/repo.git").is_ok());
-        assert!(manager.validate_repo_url("git@github.com:user/repo.git").is_ok());
+        assert!(manager
+            .validate_repo_url("https://github.com/user/repo.git")
+            .is_ok());
+        assert!(manager
+            .validate_repo_url("git@github.com:user/repo.git")
+            .is_ok());
 
         // Invalid URLs
-        assert!(manager.validate_repo_url("http://github.com/user/repo.git").is_err());
-        assert!(manager.validate_repo_url("https://localhost/repo.git").is_err());
-        assert!(manager.validate_repo_url("https://192.168.1.1/repo.git").is_err());
+        assert!(manager
+            .validate_repo_url("http://github.com/user/repo.git")
+            .is_err());
+        assert!(manager
+            .validate_repo_url("https://localhost/repo.git")
+            .is_err());
+        assert!(manager
+            .validate_repo_url("https://192.168.1.1/repo.git")
+            .is_err());
     }
 
     #[test]

@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use axum::{Extension, Json};
-    use serde_json::json;
     use coderabbit_api_gateway::handlers::webhook;
-    use coderabbit_integration_tests::common::helpers::{test_config, create_test_orchestrator};
+    use coderabbit_integration_tests::common::helpers::{create_test_orchestrator, test_config};
+    use serde_json::json;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_github_webhook_creates_job() {
@@ -55,7 +55,8 @@ mod tests {
             Extension(orchestrator.clone()),
             Extension(config),
             Json(payload),
-        ).await;
+        )
+        .await;
 
         match result {
             Ok(response) => {
@@ -99,7 +100,8 @@ mod tests {
             Extension(orchestrator.clone()),
             Extension(config),
             Json(payload),
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -140,7 +142,8 @@ mod tests {
             Extension(orchestrator.clone()),
             Extension(config),
             Json(payload),
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -197,7 +200,8 @@ mod tests {
             Extension(orchestrator.clone()),
             Extension(config),
             Json(payload),
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
         let response = result.unwrap();

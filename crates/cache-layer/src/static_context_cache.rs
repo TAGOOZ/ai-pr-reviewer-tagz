@@ -1,4 +1,4 @@
-use crate::cache::{CacheLayer, generate_cache_key};
+use crate::cache::{generate_cache_key, CacheLayer};
 use coderabbit_shared::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -6,11 +6,11 @@ use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum StaticContentType {
-    OrgPolicies,      // Coding standards, conventions (CONTRIBUTING.md, CODE_STYLE.md)
-    Architecture,     // Design docs, patterns (ARCHITECTURE.md, DESIGN.md)
-    Security,         // Security policies, requirements (SECURITY.md)
-    StyleGuides,      // Language-specific style guides
-    BestPractices,    // General best practices
+    OrgPolicies,   // Coding standards, conventions (CONTRIBUTING.md, CODE_STYLE.md)
+    Architecture,  // Design docs, patterns (ARCHITECTURE.md, DESIGN.md)
+    Security,      // Security policies, requirements (SECURITY.md)
+    StyleGuides,   // Language-specific style guides
+    BestPractices, // General best practices
 }
 
 impl StaticContentType {
@@ -26,35 +26,47 @@ impl StaticContentType {
 
     pub fn default_ttl(&self) -> Duration {
         match self {
-            Self::OrgPolicies => Duration::from_secs(86400),      // 24 hours
-            Self::Architecture => Duration::from_secs(86400),     // 24 hours
-            Self::Security => Duration::from_secs(43200),         // 12 hours (more sensitive)
-            Self::StyleGuides => Duration::from_secs(86400),      // 24 hours
-            Self::BestPractices => Duration::from_secs(86400),    // 24 hours
+            Self::OrgPolicies => Duration::from_secs(86400), // 24 hours
+            Self::Architecture => Duration::from_secs(86400), // 24 hours
+            Self::Security => Duration::from_secs(43200),    // 12 hours (more sensitive)
+            Self::StyleGuides => Duration::from_secs(86400), // 24 hours
+            Self::BestPractices => Duration::from_secs(86400), // 24 hours
         }
     }
 
     pub fn matching_files(&self) -> Vec<&'static str> {
         match self {
             Self::OrgPolicies => vec![
-                "CONTRIBUTING.md", "CODE_STYLE.md", "CONVENTIONS.md",
-                "CODING_STANDARDS.md", ".editorconfig"
+                "CONTRIBUTING.md",
+                "CODE_STYLE.md",
+                "CONVENTIONS.md",
+                "CODING_STANDARDS.md",
+                ".editorconfig",
             ],
             Self::Architecture => vec![
-                "ARCHITECTURE.md", "DESIGN.md", "PATTERNS.md",
-                "docs/architecture", "docs/design"
+                "ARCHITECTURE.md",
+                "DESIGN.md",
+                "PATTERNS.md",
+                "docs/architecture",
+                "docs/design",
             ],
             Self::Security => vec![
-                "SECURITY.md", "SECURITY_POLICY.md", "docs/security",
-                "security-requirements.md"
+                "SECURITY.md",
+                "SECURITY_POLICY.md",
+                "docs/security",
+                "security-requirements.md",
             ],
             Self::StyleGuides => vec![
-                "STYLE_GUIDE.md", ".eslintrc", ".prettierrc",
-                "rustfmt.toml", ".pylintrc", "pyproject.toml"
+                "STYLE_GUIDE.md",
+                ".eslintrc",
+                ".prettierrc",
+                "rustfmt.toml",
+                ".pylintrc",
+                "pyproject.toml",
             ],
-            Self::BestPractices => vec![
-                "BEST_PRACTICES.md", "GUIDELINES.md", "docs/best-practices"
-            ],
+            Self::BestPractices => {
+                vec!["BEST_PRACTICES.md", "GUIDELINES.md", "docs/best-practices"]
+            }
         }
     }
 }
@@ -67,7 +79,7 @@ pub struct StaticContext {
     pub org: String,
     pub repo: String,
     pub cached_at: chrono::DateTime<chrono::Utc>,
-    pub embedding_summary: Option<String>,  // Optional: pre-computed embedding summary
+    pub embedding_summary: Option<String>, // Optional: pre-computed embedding summary
 }
 
 pub struct StaticContextCache<C: CacheLayer> {
@@ -81,10 +93,7 @@ impl<C: CacheLayer> StaticContextCache<C> {
 
     /// Generate cache key for static context
     fn generate_key(&self, org: &str, repo: &str, content_type: &StaticContentType) -> String {
-        generate_cache_key(
-            "static_context",
-            &[org, repo, content_type.cache_prefix()]
-        )
+        generate_cache_key("static_context", &[org, repo, content_type.cache_prefix()])
     }
 
     /// Get static context from cache
@@ -99,10 +108,7 @@ impl<C: CacheLayer> StaticContextCache<C> {
     }
 
     /// Set static context in cache
-    pub async fn set_static_context(
-        &self,
-        static_context: &StaticContext,
-    ) -> Result<()> {
+    pub async fn set_static_context(&self, static_context: &StaticContext) -> Result<()> {
         let key = self.generate_key(
             &static_context.org,
             &static_context.repo,
@@ -138,11 +144,7 @@ impl<C: CacheLayer> StaticContextCache<C> {
     }
 
     /// Invalidate all static context for a repo (e.g., after main branch update)
-    pub async fn invalidate_repo_static_context(
-        &self,
-        org: &str,
-        repo: &str,
-    ) -> Result<()> {
+    pub async fn invalidate_repo_static_context(&self, org: &str, repo: &str) -> Result<()> {
         let pattern = format!("static_context:{}:{}:*", org, repo);
         self.cache.invalidate(&pattern).await
     }
@@ -174,7 +176,7 @@ impl<C: CacheLayer> StaticContextCache<C> {
         &self,
         org: &str,
         repo: &str,
-        file_contents: Vec<(String, String)>,  // (file_path, content)
+        file_contents: Vec<(String, String)>, // (file_path, content)
     ) -> Result<WarmupResult> {
         let mut result = WarmupResult {
             org: org.to_string(),
@@ -200,18 +202,18 @@ impl<C: CacheLayer> StaticContextCache<C> {
                     content_type.matching_files().iter().any(|pattern| {
                         // Use proper path matching instead of substring contains
                         let pattern_lower = pattern.to_lowercase();
-                        
+
                         // For exact filename patterns (e.g., "SECURITY.md")
                         if pattern_lower.contains('.') {
                             // Match if path ends with the pattern or contains it as /pattern
-                            path_lower.ends_with(&pattern_lower) || 
-                            path_lower.contains(&format!("/{}", pattern_lower))
+                            path_lower.ends_with(&pattern_lower)
+                                || path_lower.contains(&format!("/{}", pattern_lower))
                         } else {
                             // For directory/path patterns (e.g., "docs/architecture")
                             // Match if path contains the pattern as a complete segment
-                            path_lower.contains(&pattern_lower) &&
-                            (path_lower.starts_with(&pattern_lower) || 
-                             path_lower.contains(&format!("/{}", pattern_lower)))
+                            path_lower.contains(&pattern_lower)
+                                && (path_lower.starts_with(&pattern_lower)
+                                    || path_lower.contains(&format!("/{}", pattern_lower)))
                         }
                     })
                 })
@@ -242,7 +244,7 @@ impl<C: CacheLayer> StaticContextCache<C> {
                 org: org.to_string(),
                 repo: repo.to_string(),
                 cached_at: chrono::Utc::now(),
-                embedding_summary: None,  // Could pre-compute embeddings here
+                embedding_summary: None, // Could pre-compute embeddings here
             };
 
             // Cache the static context
@@ -277,17 +279,26 @@ mod tests {
     #[test]
     fn test_static_content_type_cache_prefix() {
         assert_eq!(StaticContentType::OrgPolicies.cache_prefix(), "policies");
-        assert_eq!(StaticContentType::Architecture.cache_prefix(), "architecture");
+        assert_eq!(
+            StaticContentType::Architecture.cache_prefix(),
+            "architecture"
+        );
         assert_eq!(StaticContentType::Security.cache_prefix(), "security");
     }
 
     #[test]
     fn test_static_content_type_ttls() {
         // Security should have shorter TTL
-        assert!(StaticContentType::Security.default_ttl() < StaticContentType::OrgPolicies.default_ttl());
+        assert!(
+            StaticContentType::Security.default_ttl()
+                < StaticContentType::OrgPolicies.default_ttl()
+        );
 
         // Most types should have 24h TTL
-        assert_eq!(StaticContentType::OrgPolicies.default_ttl(), Duration::from_secs(86400));
+        assert_eq!(
+            StaticContentType::OrgPolicies.default_ttl(),
+            Duration::from_secs(86400)
+        );
     }
 
     #[test]

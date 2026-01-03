@@ -1,14 +1,13 @@
+use crate::helpers::git_client::GitHubClient;
+use base64::Engine;
 /// Service for loading and caching .coderabbit.yaml configurations from repositories
 ///
 /// This service fetches repository-specific configurations and manages caching
 /// to avoid repeated API calls.
-
-use coderabbit_shared::{RepoConfig, Result, CodeRabbitError};
-use crate::helpers::git_client::GitHubClient;
+use coderabbit_shared::{CodeRabbitError, RepoConfig, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use base64::Engine;
 
 /// Configuration loader service
 pub struct ConfigLoader {
@@ -41,12 +40,7 @@ impl ConfigLoader {
     ///
     /// # Returns
     /// Returns the parsed configuration or a default config if not found
-    pub async fn load_config(
-        &self,
-        owner: &str,
-        repo: &str,
-        ref_name: &str,
-    ) -> Result<RepoConfig> {
+    pub async fn load_config(&self, owner: &str, repo: &str, ref_name: &str) -> Result<RepoConfig> {
         let cache_key = format!("{}/{}/{}", owner, repo, ref_name);
 
         // Check cache first
@@ -62,24 +56,34 @@ impl ConfigLoader {
         }
 
         // Fetch from repository
-        tracing::info!("Fetching .coderabbit.yaml from {}/{} (ref: {})", owner, repo, ref_name);
+        tracing::info!(
+            "Fetching .coderabbit.yaml from {}/{} (ref: {})",
+            owner,
+            repo,
+            ref_name
+        );
 
         match self.fetch_config_file(owner, repo, ref_name).await {
             Ok((config, sha)) => {
                 // Cache the config
                 let mut cache = self.cache.write().await;
-                cache.insert(cache_key, CachedConfig {
-                    config: config.clone(),
-                    sha,
-                    timestamp: std::time::SystemTime::now(),
-                });
+                cache.insert(
+                    cache_key,
+                    CachedConfig {
+                        config: config.clone(),
+                        sha,
+                        timestamp: std::time::SystemTime::now(),
+                    },
+                );
 
                 Ok(config)
             }
             Err(e) => {
                 tracing::warn!(
                     "Failed to load .coderabbit.yaml from {}/{}: {}. Using default config.",
-                    owner, repo, e
+                    owner,
+                    repo,
+                    e
                 );
                 Ok(RepoConfig::default())
             }
@@ -102,21 +106,27 @@ impl ConfigLoader {
         ];
 
         for file_path in config_files {
-            match self.github_client.fetch_file_from_ref(owner, repo, file_path, ref_name).await {
+            match self
+                .github_client
+                .fetch_file_from_ref(owner, repo, file_path, ref_name)
+                .await
+            {
                 Ok(file_response) => {
                     tracing::info!("Found config file: {}", file_path);
 
                     // Decode base64 content
                     let decoded = base64::engine::general_purpose::STANDARD
                         .decode(&file_response.content.replace('\n', ""))
-                        .map_err(|e| CodeRabbitError::Internal(
-                            format!("Failed to decode config file: {}", e)
-                        ))?;
+                        .map_err(|e| {
+                            CodeRabbitError::Internal(format!(
+                                "Failed to decode config file: {}",
+                                e
+                            ))
+                        })?;
 
-                    let yaml_content = String::from_utf8(decoded)
-                        .map_err(|e| CodeRabbitError::Internal(
-                            format!("Config file is not valid UTF-8: {}", e)
-                        ))?;
+                    let yaml_content = String::from_utf8(decoded).map_err(|e| {
+                        CodeRabbitError::Internal(format!("Config file is not valid UTF-8: {}", e))
+                    })?;
 
                     // Parse YAML
                     let config = RepoConfig::from_yaml(&yaml_content)
@@ -134,7 +144,7 @@ impl ConfigLoader {
         }
 
         Err(CodeRabbitError::NotFound(
-            ".coderabbit.yaml not found in repository".to_string()
+            ".coderabbit.yaml not found in repository".to_string(),
         ))
     }
 

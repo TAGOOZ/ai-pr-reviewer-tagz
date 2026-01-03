@@ -2,17 +2,13 @@
 ///
 /// This module provides endpoints for getting filtered/ranked issues from reviews
 /// and applies repository-specific configuration for severity thresholds.
-
 use axum::{
-    Json,
     extract::{Path, Query},
     http::StatusCode,
+    Json,
 };
+use coderabbit_shared::{IssueCategory, IssueFilter, IssueSeverity, RankedIssue, RepoConfig};
 use serde::{Deserialize, Serialize};
-use coderabbit_shared::{
-    RankedIssue, IssueFilter, IssueSeverity, IssueCategory,
-    RepoConfig,
-};
 use std::collections::HashMap;
 
 /// Query parameters for issue filtering
@@ -76,7 +72,6 @@ pub async fn get_filtered_issues(
     Path((owner, repo, pr_number)): Path<(String, String, u32)>,
     Query(params): Query<IssueFilterQuery>,
 ) -> std::result::Result<Json<FilteredIssuesResponse>, (StatusCode, Json<serde_json::Value>)> {
-
     // In a real implementation, this would fetch issues from the database
     // For now, we'll create some sample issues
     let mut all_issues = create_sample_issues(&owner, &repo, pr_number);
@@ -96,16 +91,19 @@ pub async fn get_filtered_issues(
 
     // Build filter summary
     let filters_applied = FilterSummary {
-        min_severity: filter.min_severity
+        min_severity: filter
+            .min_severity
             .map(|s| s.to_string())
             .unwrap_or_else(|| "none".to_string()),
         max_issues: filter.max_issues,
         min_confidence: filter.min_confidence,
-        allowed_categories: filter.allowed_categories
+        allowed_categories: filter
+            .allowed_categories
             .iter()
             .map(|c| c.as_str().to_string())
             .collect(),
-        blocked_categories: filter.blocked_categories
+        blocked_categories: filter
+            .blocked_categories
             .iter()
             .map(|c| c.as_str().to_string())
             .collect(),
@@ -122,7 +120,9 @@ pub async fn get_filtered_issues(
 }
 
 /// Build issue filter from query parameters
-fn build_filter_from_params(params: &IssueFilterQuery) -> std::result::Result<IssueFilter, (StatusCode, Json<serde_json::Value>)> {
+fn build_filter_from_params(
+    params: &IssueFilterQuery,
+) -> std::result::Result<IssueFilter, (StatusCode, Json<serde_json::Value>)> {
     let mut filter = IssueFilter::default();
 
     // Parse minimum severity
@@ -133,7 +133,7 @@ fn build_filter_from_params(params: &IssueFilterQuery) -> std::result::Result<Is
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({
                     "error": format!("Invalid severity level: {}", sev_str)
-                }))
+                })),
             ));
         }
     }
@@ -163,7 +163,9 @@ fn build_filter_from_params(params: &IssueFilterQuery) -> std::result::Result<Is
 }
 
 /// Parse comma-separated categories
-fn parse_categories(cats: &str) -> std::result::Result<Vec<IssueCategory>, (StatusCode, Json<serde_json::Value>)> {
+fn parse_categories(
+    cats: &str,
+) -> std::result::Result<Vec<IssueCategory>, (StatusCode, Json<serde_json::Value>)> {
     cats.split(',')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
@@ -181,7 +183,7 @@ fn parse_categories(cats: &str) -> std::result::Result<Vec<IssueCategory>, (Stat
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({
                     "error": format!("Invalid category: {}", other)
-                }))
+                })),
             )),
         })
         .collect()
@@ -200,7 +202,9 @@ fn calculate_severity_stats(issues: &[RankedIssue]) -> HashMap<String, usize> {
 fn calculate_category_stats(issues: &[RankedIssue]) -> HashMap<String, usize> {
     let mut stats = HashMap::new();
     for issue in issues {
-        *stats.entry(issue.category.as_str().to_string()).or_insert(0) += 1;
+        *stats
+            .entry(issue.category.as_str().to_string())
+            .or_insert(0) += 1;
     }
     stats
 }
@@ -214,10 +218,13 @@ fn create_sample_issues(_owner: &str, _repo: &str, _pr_number: u32) -> Vec<Ranke
             severity: IssueSeverity::Critical,
             category: IssueCategory::Security,
             title: "Potential SQL injection vulnerability".to_string(),
-            description: "User input is directly interpolated into SQL query without sanitization".to_string(),
+            description: "User input is directly interpolated into SQL query without sanitization"
+                .to_string(),
             file_path: "src/database/queries.rs".to_string(),
             line_number: Some(42),
-            code_snippet: Some("let query = format!(\"SELECT * FROM users WHERE id = {}\", user_id);".to_string()),
+            code_snippet: Some(
+                "let query = format!(\"SELECT * FROM users WHERE id = {}\", user_id);".to_string(),
+            ),
             suggestion: Some("Use parameterized queries with sqlx".to_string()),
             priority_score: 500,
             confidence: 0.95,
@@ -231,7 +238,9 @@ fn create_sample_issues(_owner: &str, _repo: &str, _pr_number: u32) -> Vec<Ranke
             file_path: "src/handlers/api.rs".to_string(),
             line_number: Some(128),
             code_snippet: Some("let data = fetch_data().unwrap();".to_string()),
-            suggestion: Some("Use .expect() with a descriptive message or proper error handling".to_string()),
+            suggestion: Some(
+                "Use .expect() with a descriptive message or proper error handling".to_string(),
+            ),
             priority_score: 390,
             confidence: 0.90,
         },
@@ -240,11 +249,15 @@ fn create_sample_issues(_owner: &str, _repo: &str, _pr_number: u32) -> Vec<Ranke
             severity: IssueSeverity::Warning,
             category: IssueCategory::Performance,
             title: "Inefficient string concatenation in loop".to_string(),
-            description: "Using + operator for string concatenation in a loop causes multiple allocations".to_string(),
+            description:
+                "Using + operator for string concatenation in a loop causes multiple allocations"
+                    .to_string(),
             file_path: "src/utils/formatter.rs".to_string(),
             line_number: Some(56),
             code_snippet: Some("for item in items { result = result + &item; }".to_string()),
-            suggestion: Some("Use String::push_str() or collect() for better performance".to_string()),
+            suggestion: Some(
+                "Use String::push_str() or collect() for better performance".to_string(),
+            ),
             priority_score: 270,
             confidence: 0.85,
         },
@@ -319,7 +332,9 @@ pub fn apply_repo_config_to_filter(
     // If config has enabled list, restrict to those
     if !config.rules.enabled.is_empty() {
         if filter.allowed_categories.is_empty() {
-            filter.allowed_categories = config.rules.enabled
+            filter.allowed_categories = config
+                .rules
+                .enabled
                 .iter()
                 .filter_map(|s| category_from_str(s))
                 .collect();
@@ -354,8 +369,8 @@ mod tests {
         assert_eq!(issues.len(), 6);
 
         // Verify they're in priority order
-        for i in 0..issues.len()-1 {
-            assert!(issues[i].priority_score >= issues[i+1].priority_score);
+        for i in 0..issues.len() - 1 {
+            assert!(issues[i].priority_score >= issues[i + 1].priority_score);
         }
     }
 

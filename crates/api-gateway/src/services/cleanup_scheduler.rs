@@ -10,7 +10,6 @@
 /// // In your main function:
 /// cleanup_scheduler::start_cleanup_scheduler();
 /// ```
-
 use tokio::time::{interval, Duration};
 use tracing;
 

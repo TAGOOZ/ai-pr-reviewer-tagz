@@ -1,20 +1,19 @@
-use axum::{Json, http::StatusCode, Extension};
-use serde::{Deserialize};
-use serde_json::Value;
-use coderabbit_shared::{
-    ReviewResponse, ReviewRequest, PullRequest, Repository, FileChange, User,
-    Platform, ReviewStatus, ReviewMetrics, ChangeType, OrganizationConfig,
-    ReviewRules, AISettings, Severity, AppConfig, RepoConfig,
-    RagContextData, SimilarPattern, RelatedIssue, BestPractice
-};
-use coderabbit_orchestrator::{RedisOrchestrator, JobType, RagOrchestrator};
-use std::sync::Arc;
-use std::collections::HashMap;
-use uuid::Uuid;
-use crate::helpers::git_client::{GitHubClient, GitLabClient, BitbucketClient};
+use crate::helpers::git_client::{BitbucketClient, GitHubClient, GitLabClient};
 use crate::services::{ConfigLoader, HybridAnalyzer};
+use axum::{http::StatusCode, Extension, Json};
+use coderabbit_orchestrator::{JobType, RagOrchestrator, RedisOrchestrator};
+use coderabbit_shared::{
+    AISettings, AppConfig, BestPractice, ChangeType, FileChange, OrganizationConfig, Platform,
+    PullRequest, RagContextData, RelatedIssue, RepoConfig, Repository, ReviewMetrics,
+    ReviewRequest, ReviewResponse, ReviewRules, ReviewStatus, Severity, SimilarPattern, User,
+};
 use lazy_static::lazy_static;
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::{Mutex as TokioMutex, RwLock};
+use uuid::Uuid;
 
 // Global hybrid analyzer instance (shared across requests)
 // Public so cleanup_scheduler can access it
@@ -50,7 +49,10 @@ async fn ensure_rag_initialized(config: &RepoConfig) -> Result<(), String> {
                 tracing::info!("RAG Orchestrator initialized successfully");
             }
             Err(e) => {
-                tracing::warn!("Failed to initialize RAG: {}. Reviews will run without RAG context.", e);
+                tracing::warn!(
+                    "Failed to initialize RAG: {}. Reviews will run without RAG context.",
+                    e
+                );
             }
         }
     }
@@ -221,19 +223,21 @@ struct AzureUser {
 pub async fn github_webhook(
     Extension(orchestrator): Extension<Arc<RedisOrchestrator>>,
     Extension(config): Extension<Arc<AppConfig>>,
-    Json(payload): Json<Value>
+    Json(payload): Json<Value>,
 ) -> Result<Json<ReviewResponse>, StatusCode> {
     tracing::info!("Received GitHub webhook");
 
     // Parse the webhook payload
-    let webhook: GitHubWebhook = serde_json::from_value(payload)
-        .map_err(|e| {
-            tracing::error!("Failed to parse GitHub webhook: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    let webhook: GitHubWebhook = serde_json::from_value(payload).map_err(|e| {
+        tracing::error!("Failed to parse GitHub webhook: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Only process opened/synchronize events
-    if !matches!(webhook.action.as_str(), "opened" | "synchronize" | "reopened") {
+    if !matches!(
+        webhook.action.as_str(),
+        "opened" | "synchronize" | "reopened"
+    ) {
         tracing::debug!("Ignoring GitHub webhook action: {}", webhook.action);
         return Ok(Json(ReviewResponse {
             review_id: Uuid::new_v4().to_string(),
@@ -254,7 +258,7 @@ pub async fn github_webhook(
         .load_config(
             &webhook.repository.owner.login,
             &webhook.repository.name,
-            &pr.base.ref_name
+            &pr.base.ref_name,
         )
         .await
         .unwrap_or_else(|e| {
@@ -277,7 +281,7 @@ pub async fn github_webhook(
         .fetch_pr_files(
             &webhook.repository.owner.login,
             &webhook.repository.name,
-            pr.number as u32
+            pr.number as u32,
         )
         .await
         .map_err(|e| {
@@ -286,10 +290,7 @@ pub async fn github_webhook(
         })?;
 
     // Extract PR labels
-    let pr_labels: Vec<String> = pr.labels
-        .iter()
-        .map(|label| label.name.clone())
-        .collect();
+    let pr_labels: Vec<String> = pr.labels.iter().map(|label| label.name.clone()).collect();
 
     // Initialize hybrid analyzer and run analysis if cloning is enabled
     let (clone_decision_result, sast_scan_time) = if repo_config.cloning.enabled {
@@ -301,44 +302,45 @@ pub async fn github_webhook(
             // Get analyzer and run analysis
             let mut analyzer_guard = HYBRID_ANALYZER.lock().await;
             if let Some(analyzer) = analyzer_guard.as_mut() {
-                let clone_url = webhook.repository.clone_url.clone().unwrap_or_else(||
+                let clone_url = webhook.repository.clone_url.clone().unwrap_or_else(|| {
                     format!("https://github.com/{}.git", webhook.repository.full_name)
-                );
+                });
 
                 // Get github token as &str
-                let github_token = config.git_providers.github_token
-                    .as_deref()
-                    .unwrap_or("");
+                let github_token = config.git_providers.github_token.as_deref().unwrap_or("");
 
-                match analyzer.analyze_pr(
-                    &webhook.repository.owner.login,
-                    &webhook.repository.name,
-                    pr.number as u32,
-                    &pr.head.sha,
-                    &pr.head.ref_name,
-                    &clone_url,
-                    &files_changed,
-                    &pr_labels,
-                    pr.body.as_deref(),
-                    &repo_config,
-                    github_token,
-                ).await {
-                Ok(result) => {
-                    tracing::info!(
-                        "Hybrid analysis complete for PR #{}: cloned={}, analysis_time={}ms",
-                        pr.number,
-                        result.cloned,
-                        result.analysis_time_ms
-                    );
+                match analyzer
+                    .analyze_pr(
+                        &webhook.repository.owner.login,
+                        &webhook.repository.name,
+                        pr.number as u32,
+                        &pr.head.sha,
+                        &pr.head.ref_name,
+                        &clone_url,
+                        &files_changed,
+                        &pr_labels,
+                        pr.body.as_deref(),
+                        &repo_config,
+                        github_token,
+                    )
+                    .await
+                {
+                    Ok(result) => {
+                        tracing::info!(
+                            "Hybrid analysis complete for PR #{}: cloned={}, analysis_time={}ms",
+                            pr.number,
+                            result.cloned,
+                            result.analysis_time_ms
+                        );
 
-                    let sast_time = if result.sast_results.is_some() {
-                        Some(result.analysis_time_ms)
-                    } else {
-                        None
-                    };
+                        let sast_time = if result.sast_results.is_some() {
+                            Some(result.analysis_time_ms)
+                        } else {
+                            None
+                        };
 
-                    (Some(result.clone_decision), sast_time)
-                }
+                        (Some(result.clone_decision), sast_time)
+                    }
                     Err(e) => {
                         tracing::error!("Hybrid analysis failed, falling back to API-only: {}", e);
                         (None, None)
@@ -369,9 +371,9 @@ pub async fn github_webhook(
 
                 // Prepare RAG review request
                 let rag_request = coderabbit_orchestrator::PrReviewRequest {
-                    repository_id: format!("{}/{}",
-                        webhook.repository.owner.login,
-                        webhook.repository.name
+                    repository_id: format!(
+                        "{}/{}",
+                        webhook.repository.owner.login, webhook.repository.name
                     ),
                     pr_number: pr.number,
                     files: files_changed.clone(),
@@ -398,7 +400,10 @@ pub async fn github_webhook(
                         None
                     }
                     Err(_) => {
-                        tracing::warn!("RAG analysis timed out after {:?}, continuing without RAG context", rag_timeout);
+                        tracing::warn!(
+                            "RAG analysis timed out after {:?}, continuing without RAG context",
+                            rag_timeout
+                        );
                         None
                     }
                 }
@@ -420,23 +425,40 @@ pub async fn github_webhook(
     let mut review_metadata = HashMap::new();
     let rag_context_data = if let Some(rag) = &rag_context {
         review_metadata.insert("rag_enabled".to_string(), "true".to_string());
-        review_metadata.insert("similar_patterns".to_string(), rag.summary.similar_patterns_found.to_string());
-        review_metadata.insert("related_issues".to_string(), rag.summary.related_issues_found.to_string());
-        review_metadata.insert("best_practices".to_string(), rag.summary.best_practices_applied.to_string());
+        review_metadata.insert(
+            "similar_patterns".to_string(),
+            rag.summary.similar_patterns_found.to_string(),
+        );
+        review_metadata.insert(
+            "related_issues".to_string(),
+            rag.summary.related_issues_found.to_string(),
+        );
+        review_metadata.insert(
+            "best_practices".to_string(),
+            rag.summary.best_practices_applied.to_string(),
+        );
 
         // Extract and truncate RAG context for DSPy (performance optimization)
-        let similar_patterns: Vec<SimilarPattern> = rag.analyses.iter()
+        let similar_patterns: Vec<SimilarPattern> = rag
+            .analyses
+            .iter()
             .flat_map(|analysis| &analysis.context.similar_patterns)
             .take(5) // Top 5 patterns only
             .map(|pattern| SimilarPattern {
                 file_path: pattern.file_path.clone(),
                 similarity_score: pattern.similarity_score,
                 content_snippet: pattern.content.chars().take(500).collect(), // Truncate to 500 chars
-                language: pattern.metadata.get("language").cloned().unwrap_or_else(|| "unknown".to_string()),
+                language: pattern
+                    .metadata
+                    .get("language")
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string()),
             })
             .collect();
 
-        let related_issues: Vec<RelatedIssue> = rag.analyses.iter()
+        let related_issues: Vec<RelatedIssue> = rag
+            .analyses
+            .iter()
             .flat_map(|analysis| &analysis.context.related_issues)
             .take(3) // Top 3 issues only
             .map(|issue| RelatedIssue {
@@ -447,7 +469,9 @@ pub async fn github_webhook(
             })
             .collect();
 
-        let best_practices: Vec<BestPractice> = rag.analyses.iter()
+        let best_practices: Vec<BestPractice> = rag
+            .analyses
+            .iter()
             .flat_map(|analysis| &analysis.context.best_practices)
             .take(3) // Top 3 practices only
             .map(|practice| BestPractice {
@@ -489,9 +513,10 @@ pub async fn github_webhook(
         name: webhook.repository.name.clone(),
         owner: webhook.repository.owner.login.clone(),
         platform: Platform::GitHub,
-        clone_url: webhook.repository.clone_url.unwrap_or_else(||
-            format!("https://github.com/{}.git", webhook.repository.full_name)
-        ),
+        clone_url: webhook
+            .repository
+            .clone_url
+            .unwrap_or_else(|| format!("https://github.com/{}.git", webhook.repository.full_name)),
         default_branch: webhook.repository.default_branch.clone(),
     };
 
@@ -513,14 +538,17 @@ pub async fn github_webhook(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let review_id = orchestrator.enqueue_job(
-        JobType::ReviewRequest,
-        payload,
-        5, // priority
-    ).await.map_err(|e| {
-        tracing::error!("Failed to queue review job: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let review_id = orchestrator
+        .enqueue_job(
+            JobType::ReviewRequest,
+            payload,
+            5, // priority
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to queue review job: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(ReviewResponse {
         review_id,
@@ -533,15 +561,14 @@ pub async fn github_webhook(
 pub async fn gitlab_webhook(
     Extension(orchestrator): Extension<Arc<RedisOrchestrator>>,
     Extension(config): Extension<Arc<AppConfig>>,
-    Json(payload): Json<Value>
+    Json(payload): Json<Value>,
 ) -> Result<Json<ReviewResponse>, StatusCode> {
     tracing::info!("Received GitLab webhook");
 
-    let webhook: GitLabWebhook = serde_json::from_value(payload)
-        .map_err(|e| {
-            tracing::error!("Failed to parse GitLab webhook: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    let webhook: GitLabWebhook = serde_json::from_value(payload).map_err(|e| {
+        tracing::error!("Failed to parse GitLab webhook: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Only process merge_request events
     if webhook.object_kind != "merge_request" {
@@ -573,14 +600,11 @@ pub async fn gitlab_webhook(
     // Fetch diff content from GitLab API
     let gitlab_client = GitLabClient::new(
         config.git_providers.gitlab_token.clone(),
-        Some("https://gitlab.com".to_string())
+        Some("https://gitlab.com".to_string()),
     );
 
     let files_changed = gitlab_client
-        .fetch_mr_files(
-            &webhook.project.path_with_namespace,
-            mr.iid as u32
-        )
+        .fetch_mr_files(&webhook.project.path_with_namespace, mr.iid as u32)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch MR files from GitLab: {}", e);
@@ -605,9 +629,18 @@ pub async fn gitlab_webhook(
     let repository = Repository {
         id: webhook.project.id.to_string(),
         name: webhook.project.name.clone(),
-        owner: webhook.project.path_with_namespace.split('/').next().unwrap_or("unknown").to_string(),
+        owner: webhook
+            .project
+            .path_with_namespace
+            .split('/')
+            .next()
+            .unwrap_or("unknown")
+            .to_string(),
         platform: Platform::GitLab,
-        clone_url: format!("https://gitlab.com/{}.git", webhook.project.path_with_namespace),
+        clone_url: format!(
+            "https://gitlab.com/{}.git",
+            webhook.project.path_with_namespace
+        ),
         default_branch: webhook.project.default_branch.clone(),
     };
 
@@ -627,14 +660,17 @@ pub async fn gitlab_webhook(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let review_id = orchestrator.enqueue_job(
-        JobType::ReviewRequest,
-        payload,
-        5, // priority
-    ).await.map_err(|e| {
-        tracing::error!("Failed to queue review job: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let review_id = orchestrator
+        .enqueue_job(
+            JobType::ReviewRequest,
+            payload,
+            5, // priority
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to queue review job: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(ReviewResponse {
         review_id,
@@ -647,19 +683,19 @@ pub async fn gitlab_webhook(
 pub async fn azure_webhook(
     Extension(orchestrator): Extension<Arc<RedisOrchestrator>>,
     Extension(config): Extension<Arc<AppConfig>>,
-    Json(payload): Json<Value>
+    Json(payload): Json<Value>,
 ) -> Result<Json<ReviewResponse>, StatusCode> {
     tracing::info!("Received Azure DevOps webhook");
 
-    let webhook: AzureWebhook = serde_json::from_value(payload)
-        .map_err(|e| {
-            tracing::error!("Failed to parse Azure webhook: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    let webhook: AzureWebhook = serde_json::from_value(payload).map_err(|e| {
+        tracing::error!("Failed to parse Azure webhook: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Only process pull request created/updated events
-    if !webhook.event_type.contains("pullrequest.created") &&
-       !webhook.event_type.contains("pullrequest.updated") {
+    if !webhook.event_type.contains("pullrequest.created")
+        && !webhook.event_type.contains("pullrequest.updated")
+    {
         tracing::debug!("Ignoring Azure webhook event: {}", webhook.event_type);
         return Ok(Json(ReviewResponse {
             review_id: Uuid::new_v4().to_string(),
@@ -675,19 +711,22 @@ pub async fn azure_webhook(
     })?;
 
     // Fetch files_changed from Azure DevOps API
-    let azure_org = config.git_providers.azure_devops_org.clone()
+    let azure_org = config
+        .git_providers
+        .azure_devops_org
+        .clone()
         .unwrap_or_else(|| pr.repository.project.name.clone());
 
     let azure_client = crate::helpers::git_client::AzureDevOpsClient::new(
         config.git_providers.azure_devops_pat.clone(),
-        azure_org.clone()
+        azure_org.clone(),
     );
-    
+
     let files_changed = azure_client
         .fetch_pr_files(
             &pr.repository.project.name,
             &pr.repository.id,
-            pr.pull_request_id as u32
+            pr.pull_request_id as u32,
         )
         .await
         .unwrap_or_else(|e| {
@@ -697,9 +736,16 @@ pub async fn azure_webhook(
         });
 
     if files_changed.is_empty() {
-        tracing::warn!("No files changed detected for Azure DevOps PR {}", pr.pull_request_id);
+        tracing::warn!(
+            "No files changed detected for Azure DevOps PR {}",
+            pr.pull_request_id
+        );
     } else {
-        tracing::info!("Fetched {} files from Azure DevOps PR {}", files_changed.len(), pr.pull_request_id);
+        tracing::info!(
+            "Fetched {} files from Azure DevOps PR {}",
+            files_changed.len(),
+            pr.pull_request_id
+        );
     }
 
     let pull_request = PullRequest {
@@ -712,8 +758,14 @@ pub async fn azure_webhook(
             username: pr.created_by.unique_name.clone(),
             email: None,
         },
-        base_branch: pr.target_ref_name.trim_start_matches("refs/heads/").to_string(),
-        head_branch: pr.source_ref_name.trim_start_matches("refs/heads/").to_string(),
+        base_branch: pr
+            .target_ref_name
+            .trim_start_matches("refs/heads/")
+            .to_string(),
+        head_branch: pr
+            .source_ref_name
+            .trim_start_matches("refs/heads/")
+            .to_string(),
         files_changed,
     };
 
@@ -722,8 +774,10 @@ pub async fn azure_webhook(
         name: pr.repository.name.clone(),
         owner: pr.repository.project.name.clone(),
         platform: Platform::AzureDevOps,
-        clone_url: format!("https://dev.azure.com/{}/{}/_git/{}",
-            pr.repository.project.name, pr.repository.project.name, pr.repository.name),
+        clone_url: format!(
+            "https://dev.azure.com/{}/{}/_git/{}",
+            pr.repository.project.name, pr.repository.project.name, pr.repository.name
+        ),
         default_branch: "main".to_string(),
     };
 
@@ -743,14 +797,17 @@ pub async fn azure_webhook(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let review_id = orchestrator.enqueue_job(
-        JobType::ReviewRequest,
-        payload,
-        5, // priority
-    ).await.map_err(|e| {
-        tracing::error!("Failed to queue review job: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let review_id = orchestrator
+        .enqueue_job(
+            JobType::ReviewRequest,
+            payload,
+            5, // priority
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to queue review job: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(ReviewResponse {
         review_id,

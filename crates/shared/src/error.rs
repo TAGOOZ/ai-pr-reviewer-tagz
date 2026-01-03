@@ -4,43 +4,43 @@ use thiserror::Error;
 pub enum CodeRabbitError {
     #[error("Authentication failed: {0}")]
     AuthenticationError(String),
-    
+
     #[error("Rate limit exceeded: {0}")]
     RateLimitError(String),
-    
+
     #[error("Code analysis failed: {0}")]
     AnalysisError(String),
-    
+
     #[error("AI service unavailable: {0}")]
     AIServiceError(String),
-    
+
     #[error("Database operation failed: {0}")]
     DatabaseError(String),
-    
+
     #[error("Database operation failed: {0}")]
     Database(String),
-    
+
     #[error("External API error: {0}")]
     ExternalAPIError(String),
-    
+
     #[error("Vector operation failed: {0}")]
     VectorError(String),
-    
+
     #[error("Cache operation failed: {0}")]
     CacheError(String),
-    
+
     #[error("Configuration error: {0}")]
     ConfigError(String),
-    
+
     #[error("Internal error: {0}")]
     Internal(String),
-    
+
     #[error("Internal error: {0}")]
     InternalError(String),
-    
+
     #[error("Resource not found: {0}")]
     NotFound(String),
-    
+
     // Missing error types for Python bridge
     #[error("Serialization failed: {0}")]
     SerializationError(String),

@@ -6,12 +6,10 @@
 use axum::{extract::Path, http::StatusCode, response::Response, Json};
 use reqwest::Client;
 use serde_json::{json, Value};
-use tracing::{info, error};
+use tracing::{error, info};
 
 /// GitHub webhook handler
-pub async fn github_webhook(
-    Json(_payload): Json<Value>,
-) -> Result<Response<String>, StatusCode> {
+pub async fn github_webhook(Json(_payload): Json<Value>) -> Result<Response<String>, StatusCode> {
     info!("Received GitHub webhook");
 
     // For now, just acknowledge receipt
@@ -52,7 +50,9 @@ pub async fn get_github_pr(
     if !response.status().is_success() {
         let status = response.status();
         error!("GitHub API returned error status: {}", status);
-        return Err(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR));
+        return Err(
+            StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+        );
     }
 
     let pr_data: Value = response.json().await.map_err(|e| {
@@ -60,7 +60,10 @@ pub async fn get_github_pr(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    info!("Successfully fetched PR #{} from {}/{}", pr_number, owner, repo);
+    info!(
+        "Successfully fetched PR #{} from {}/{}",
+        pr_number, owner, repo
+    );
     Ok(Json(pr_data))
 }
 
@@ -73,14 +76,11 @@ pub struct GitHubWebhookState {
 
 impl GitHubWebhookState {
     pub fn new() -> Self {
-        let webhook_secret = std::env::var("GITHUB_WEBHOOK_SECRET")
-            .unwrap_or_else(|_| {
-                tracing::warn!("GITHUB_WEBHOOK_SECRET not set, using insecure default");
-                "insecure-default-secret".to_string()
-            });
+        let webhook_secret = std::env::var("GITHUB_WEBHOOK_SECRET").unwrap_or_else(|_| {
+            tracing::warn!("GITHUB_WEBHOOK_SECRET not set, using insecure default");
+            "insecure-default-secret".to_string()
+        });
 
-        Self {
-            webhook_secret,
-        }
+        Self { webhook_secret }
     }
 }

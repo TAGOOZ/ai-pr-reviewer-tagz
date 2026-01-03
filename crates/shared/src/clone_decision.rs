@@ -2,7 +2,6 @@
 ///
 /// This module determines whether a PR requires full repository cloning
 /// or can be analyzed using only the GitHub API.
-
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -180,24 +179,44 @@ impl CloneDecisionEngine {
     fn find_security_sensitive_files(&self, files: &[String]) -> Vec<String> {
         const SECURITY_PATTERNS: &[&str] = &[
             // Authentication & Authorization
-            "auth", "login", "oauth", "jwt", "session", "security",
+            "auth",
+            "login",
+            "oauth",
+            "jwt",
+            "session",
+            "security",
             // Cryptography
-            "crypto", "encryption", "keys", "certificate", "ssl", "tls",
+            "crypto",
+            "encryption",
+            "keys",
+            "certificate",
+            "ssl",
+            "tls",
             // API & Endpoints
-            "api", "endpoint", "route", "handler",
+            "api",
+            "endpoint",
+            "route",
+            "handler",
             // Database
-            "db", "database", "migration", "schema", "sql",
+            "db",
+            "database",
+            "migration",
+            "schema",
+            "sql",
             // Configuration
-            ".env", "config", "secrets", "credentials",
+            ".env",
+            "config",
+            "secrets",
+            "credentials",
         ];
 
         files
             .iter()
             .filter(|file| {
                 let file_lower = file.to_lowercase();
-                SECURITY_PATTERNS.iter().any(|pattern| {
-                    file_lower.contains(pattern)
-                })
+                SECURITY_PATTERNS
+                    .iter()
+                    .any(|pattern| file_lower.contains(pattern))
             })
             .cloned()
             .collect()
@@ -243,9 +262,9 @@ impl CloneDecisionEngine {
                     .and_then(|n| n.to_str())
                     .unwrap_or("");
 
-                DEPENDENCY_FILES.iter().any(|dep_file| {
-                    file_name == *dep_file
-                })
+                DEPENDENCY_FILES
+                    .iter()
+                    .any(|dep_file| file_name == *dep_file)
             })
             .cloned()
             .collect()
@@ -266,9 +285,9 @@ impl CloneDecisionEngine {
         files
             .iter()
             .filter(|file| {
-                TOOL_REQUIRED_PATTERNS.iter().any(|(pattern, _tool)| {
-                    file.ends_with(pattern) || file.contains(pattern)
-                })
+                TOOL_REQUIRED_PATTERNS
+                    .iter()
+                    .any(|(pattern, _tool)| file.ends_with(pattern) || file.contains(pattern))
             })
             .cloned()
             .collect()
@@ -323,13 +342,16 @@ impl CloneDecisionEngine {
     /// Format a single reason
     fn format_reason(&self, reason: &CloneReason) -> String {
         match reason {
-            CloneReason::SastEnabled => {
-                "SAST security scanning is enabled".to_string()
-            }
+            CloneReason::SastEnabled => "SAST security scanning is enabled".to_string(),
             CloneReason::SecurityFiles(files) => {
                 format!(
                     "Security-sensitive files changed: {}",
-                    files.iter().take(3).map(|f| f.as_str()).collect::<Vec<_>>().join(", ")
+                    files
+                        .iter()
+                        .take(3)
+                        .map(|f| f.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             }
             CloneReason::LargePR { file_count } => {
@@ -339,12 +361,20 @@ impl CloneDecisionEngine {
                 format!("Dependency changes detected: {}", files.join(", "))
             }
             CloneReason::RequiredLabels(labels) => {
-                format!("PR has labels requiring deep analysis: {}", labels.join(", "))
+                format!(
+                    "PR has labels requiring deep analysis: {}",
+                    labels.join(", ")
+                )
             }
             CloneReason::SpecializedToolsNeeded(files) => {
                 format!(
                     "Files require specialized security tools: {}",
-                    files.iter().take(3).map(|f| f.as_str()).collect::<Vec<_>>().join(", ")
+                    files
+                        .iter()
+                        .take(3)
+                        .map(|f| f.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             }
             CloneReason::UserRequested => {
@@ -387,9 +417,7 @@ mod tests {
         let decision = engine.should_clone(&files, &labels, None);
 
         assert!(decision.should_clone);
-        assert!(decision
-            .reasons
-            .contains(&CloneReason::SastEnabled));
+        assert!(decision.reasons.contains(&CloneReason::SastEnabled));
     }
 
     #[test]
@@ -407,9 +435,10 @@ mod tests {
 
         assert!(decision.should_clone);
 
-        let has_security_reason = decision.reasons.iter().any(|r| {
-            matches!(r, CloneReason::SecurityFiles(_))
-        });
+        let has_security_reason = decision
+            .reasons
+            .iter()
+            .any(|r| matches!(r, CloneReason::SecurityFiles(_)));
         assert!(has_security_reason);
     }
 
@@ -424,9 +453,10 @@ mod tests {
 
         assert!(decision.should_clone);
 
-        let has_large_pr_reason = decision.reasons.iter().any(|r| {
-            matches!(r, CloneReason::LargePR { .. })
-        });
+        let has_large_pr_reason = decision
+            .reasons
+            .iter()
+            .any(|r| matches!(r, CloneReason::LargePR { .. }));
         assert!(has_large_pr_reason);
     }
 
@@ -445,9 +475,10 @@ mod tests {
 
         assert!(decision.should_clone);
 
-        let has_dep_reason = decision.reasons.iter().any(|r| {
-            matches!(r, CloneReason::DependencyChanges(_))
-        });
+        let has_dep_reason = decision
+            .reasons
+            .iter()
+            .any(|r| matches!(r, CloneReason::DependencyChanges(_)));
         assert!(has_dep_reason);
     }
 
@@ -462,9 +493,10 @@ mod tests {
 
         assert!(decision.should_clone);
 
-        let has_label_reason = decision.reasons.iter().any(|r| {
-            matches!(r, CloneReason::RequiredLabels(_))
-        });
+        let has_label_reason = decision
+            .reasons
+            .iter()
+            .any(|r| matches!(r, CloneReason::RequiredLabels(_)));
         assert!(has_label_reason);
     }
 
@@ -499,9 +531,10 @@ mod tests {
 
         assert!(decision.should_clone);
 
-        let has_tools_reason = decision.reasons.iter().any(|r| {
-            matches!(r, CloneReason::SpecializedToolsNeeded(_))
-        });
+        let has_tools_reason = decision
+            .reasons
+            .iter()
+            .any(|r| matches!(r, CloneReason::SpecializedToolsNeeded(_)));
         assert!(has_tools_reason);
     }
 

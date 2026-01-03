@@ -2,13 +2,12 @@
 ///
 /// Semgrep is a fast, open-source, static analysis tool that searches code for patterns.
 /// It supports 30+ languages and comes with hundreds of security rules.
-
 use super::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::path::Path;
-use tokio::process::Command;
 use std::time::Instant;
+use tokio::process::Command;
 
 pub struct SemgrepScanner {
     /// Path to semgrep executable
@@ -23,9 +22,7 @@ impl SemgrepScanner {
     }
 
     pub fn with_path(path: String) -> Self {
-        Self {
-            semgrep_path: path,
-        }
+        Self { semgrep_path: path }
     }
 
     /// Get recommended rulesets for a language
@@ -102,7 +99,7 @@ impl SastScanner for SemgrepScanner {
         // Build command arguments
         let mut args = vec![
             "scan".to_string(),
-            "--json".to_string(), // JSON output
+            "--json".to_string(),  // JSON output
             "--quiet".to_string(), // Suppress progress
         ];
 
@@ -138,7 +135,7 @@ impl SastScanner for SemgrepScanner {
         // Run semgrep
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(config.timeout_seconds),
-            Command::new(&self.semgrep_path).args(&args).output()
+            Command::new(&self.semgrep_path).args(&args).output(),
         )
         .await
         .map_err(|_| "Semgrep scan timed out".to_string())?
@@ -195,15 +192,10 @@ impl SastScanner for SemgrepScanner {
         let mut findings = Vec::new();
 
         for (idx, result) in results.iter().enumerate() {
-            let check_id = result["check_id"]
-                .as_str()
-                .unwrap_or("unknown")
-                .to_string();
+            let check_id = result["check_id"].as_str().unwrap_or("unknown").to_string();
 
             // Parse severity from metadata
-            let severity_str = result["extra"]["severity"]
-                .as_str()
-                .unwrap_or("WARNING");
+            let severity_str = result["extra"]["severity"].as_str().unwrap_or("WARNING");
 
             let severity = match severity_str {
                 "ERROR" => SastSeverity::High,
@@ -213,8 +205,7 @@ impl SastScanner for SemgrepScanner {
             };
 
             // Get confidence from metadata
-            let confidence_str = result["extra"]["metadata"]["confidence"]
-                .as_str();
+            let confidence_str = result["extra"]["metadata"]["confidence"].as_str();
 
             let confidence = match confidence_str {
                 Some("HIGH") => 0.9,
@@ -239,16 +230,11 @@ impl SastScanner for SemgrepScanner {
                         .as_str()
                         .unwrap_or("security")
                 ),
-                file_path: result["path"]
-                    .as_str()
-                    .unwrap_or("unknown")
-                    .to_string(),
+                file_path: result["path"].as_str().unwrap_or("unknown").to_string(),
                 line_number: result["start"]["line"].as_u64().map(|n| n as u32),
                 end_line_number: result["end"]["line"].as_u64().map(|n| n as u32),
                 column: result["start"]["col"].as_u64().map(|n| n as u32),
-                code_snippet: result["extra"]["lines"]
-                    .as_str()
-                    .map(|s| s.to_string()),
+                code_snippet: result["extra"]["lines"].as_str().map(|s| s.to_string()),
                 cwe_id: result["extra"]["metadata"]["cwe"]
                     .as_array()
                     .and_then(|arr| arr.get(0))

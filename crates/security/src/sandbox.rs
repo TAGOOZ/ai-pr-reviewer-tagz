@@ -1,12 +1,11 @@
-use coderabbit_shared::{Result, CodeRabbitError};
-use std::collections::HashMap;
+use coderabbit_shared::{CodeRabbitError, Result};
+use nix::unistd::Uid;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::os::unix::fs::PermissionsExt;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::process::{Command, Stdio};
-use std::os::unix::fs::PermissionsExt;
-use nix::unistd::Uid;
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxConfig {
@@ -61,12 +60,14 @@ pub struct SecurityStats {
 impl SecurityManager {
     pub async fn new(config: SandboxConfig) -> Result<Self> {
         tracing::info!("Initializing security manager with sandbox configuration");
-        
+
         // Verify we're running as root for privilege operations
         if !Uid::current().is_root() {
-            tracing::warn!("Security manager not running as root - limited sandboxing capabilities");
+            tracing::warn!(
+                "Security manager not running as root - limited sandboxing capabilities"
+            );
         }
-        
+
         let security_manager = Self {
             config,
             active_sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -79,59 +80,70 @@ impl SecurityManager {
                 security_score: 100.0,
             })),
         };
-        
+
         security_manager.initialize_sandbox_environment().await?;
-        
+
         Ok(security_manager)
     }
 
     /// Initialize sandbox environment with security constraints
     async fn initialize_sandbox_environment(&self) -> Result<()> {
         tracing::info!("Setting up sandbox environment with Jailkit/cgroups");
-        
+
         // Create secure working directory
         let sandbox_dir = "/tmp/coderabbit_sandbox";
         if let Err(e) = std::fs::create_dir_all(sandbox_dir) {
             tracing::error!("Failed to create sandbox directory: {}", e);
-            return Err(CodeRabbitError::ConfigError(format!("Sandbox setup failed: {}", e)));
+            return Err(CodeRabbitError::ConfigError(format!(
+                "Sandbox setup failed: {}",
+                e
+            )));
         }
-        
+
         // Set restrictive permissions
-        let metadata = std::fs::metadata(sandbox_dir).map_err(|e| CodeRabbitError::ConfigError(format!("Failed to get sandbox directory metadata: {}", e)))?;
+        let metadata = std::fs::metadata(sandbox_dir).map_err(|e| {
+            CodeRabbitError::ConfigError(format!("Failed to get sandbox directory metadata: {}", e))
+        })?;
         let mut perms = metadata.permissions();
         perms.set_mode(0o700); // Only owner can read/write/execute
-        std::fs::set_permissions(sandbox_dir, perms).map_err(|e| CodeRabbitError::ConfigError(format!("Failed to set sandbox permissions: {}", e)))?;
-        
-        tracing::info!("Sandbox directory created with restricted permissions: {}", sandbox_dir);
-        
+        std::fs::set_permissions(sandbox_dir, perms).map_err(|e| {
+            CodeRabbitError::ConfigError(format!("Failed to set sandbox permissions: {}", e))
+        })?;
+
+        tracing::info!(
+            "Sandbox directory created with restricted permissions: {}",
+            sandbox_dir
+        );
+
         // Initialize cgroup limits
         self.setup_cgroup_limits().await?;
-        
+
         // Verify Jailkit configuration
         self.verify_jailkit_setup().await?;
-        
+
         Ok(())
     }
 
     /// Set up cgroup resource limits
     async fn setup_cgroup_limits(&self) -> Result<()> {
         tracing::info!("Configuring cgroup memory and CPU limits");
-        
+
         let memory_limit = self.config.max_memory_mb * 1024 * 1024; // Convert to bytes
         let cpu_quota = self.config.max_cpu_time_seconds * 100; // Convert to percentage * 100
-        
+
         // Create memory cgroup
-        let memory_cgroup = format!("/sys/fs/cgroup/memory/coderabbit_sandbox_{}", 
-                                  std::process::id());
-        
+        let memory_cgroup = format!(
+            "/sys/fs/cgroup/memory/coderabbit_sandbox_{}",
+            std::process::id()
+        );
+
         if let Err(e) = Command::new("sh")
             .arg("-c")
             .arg(&format!(
                 "echo {} > {}/memory.limit_in_bytes && \
                  echo {} > {}/cpu.cfs_quota_us && \
                  echo {} > {}/cpu.cfs_period_us",
-                memory_limit, memory_cgroup, cpu_quota, memory_cgroup, 
-                100000, memory_cgroup
+                memory_limit, memory_cgroup, cpu_quota, memory_cgroup, 100000, memory_cgroup
             ))
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -139,27 +151,30 @@ impl SecurityManager {
         {
             tracing::warn!("Failed to setup cgroup limits: {}", e);
         }
-        
+
         Ok(())
     }
 
     /// Verify Jailkit is properly configured
     async fn verify_jailkit_setup(&self) -> Result<()> {
         tracing::info!("Verifying Jailkit configuration");
-        
+
         // Check if jailkit binary exists and has correct permissions
         let jailkit_path = "/usr/sbin/jk_chrootlaunch";
         match std::fs::metadata(jailkit_path) {
             Ok(metadata) => {
                 let permissions = metadata.permissions();
-                tracing::info!("Found Jailkit at {} with permissions: {:?}", 
-                             jailkit_path, permissions.mode());
+                tracing::info!(
+                    "Found Jailkit at {} with permissions: {:?}",
+                    jailkit_path,
+                    permissions.mode()
+                );
             }
             Err(_) => {
                 tracing::warn!("Jailkit not found at standard location");
             }
         }
-        
+
         // Check for required system utilities
         let required_tools = ["timeout", "nice", "prlimit", "unshare"];
         for tool in &required_tools {
@@ -174,30 +189,37 @@ impl SecurityManager {
                 Err(e) => tracing::warn!("Failed to check tool '{}': {}", tool, e),
             }
         }
-        
+
         Ok(())
     }
 
     /// Execute code in secure sandbox environment
-    pub async fn execute_in_sandbox(&self, code: &str, language: &str, _working_dir: Option<String>) -> Result<ExecutionResult> {
+    pub async fn execute_in_sandbox(
+        &self,
+        code: &str,
+        language: &str,
+        _working_dir: Option<String>,
+    ) -> Result<ExecutionResult> {
         let start_time = std::time::Instant::now();
         let session_id = format!("sandbox_{}", chrono::Utc::now().timestamp());
-        
+
         tracing::info!("Starting sandboxed execution session: {}", session_id);
-        
+
         // Update statistics
         {
             let mut stats = self.security_stats.write().await;
             stats.total_executions += 1;
         }
-        
+
         // Create secure working directory for this session
         let session_dir = format!("/tmp/coderabbit_sandbox/{}", session_id);
         if let Err(e) = std::fs::create_dir_all(&session_dir) {
-            return Err(CodeRabbitError::ConfigError(
-                format!("Failed to create session directory: {}", e)));
+            return Err(CodeRabbitError::ConfigError(format!(
+                "Failed to create session directory: {}",
+                e
+            )));
         }
-        
+
         let session = ExecutionSession {
             session_id: session_id.clone(),
             pid: None,
@@ -205,50 +227,64 @@ impl SecurityManager {
             working_directory: session_dir.clone(),
             allowed_executables: self.get_allowed_executables(language),
         };
-        
+
         // Register session
         {
             let mut sessions = self.active_sessions.write().await;
             sessions.insert(session_id.clone(), session);
         }
-        
+
         // Write code to secure file
         let code_file = format!("{}/code.{}", session_dir, self.get_file_extension(language));
         if let Err(e) = std::fs::write(&code_file, code) {
-            return Err(CodeRabbitError::ConfigError(
-                format!("Failed to write code file: {}", e)));
+            return Err(CodeRabbitError::ConfigError(format!(
+                "Failed to write code file: {}",
+                e
+            )));
         }
-        
+
         // Execute in sandbox
-        let result = self.execute_with_constraints(&session_dir, &code_file, language).await;
-        
+        let result = self
+            .execute_with_constraints(&session_dir, &code_file, language)
+            .await;
+
         // Cleanup session
         self.cleanup_session(&session_id).await;
-        
+
         // Update statistics
         self.update_security_stats(&result).await;
-        
+
         result
     }
 
     /// Execute code with security constraints
-    async fn execute_with_constraints(&self, session_dir: &str, code_file: &str, 
-                                    language: &str) -> Result<ExecutionResult> {
+    async fn execute_with_constraints(
+        &self,
+        session_dir: &str,
+        code_file: &str,
+        language: &str,
+    ) -> Result<ExecutionResult> {
         let start_time = std::time::Instant::now();
-        
+
         tracing::info!("Executing {} code in sandbox: {}", language, code_file);
-        
+
         let (executable, args) = self.get_execution_command(language, code_file);
-        
+
         // Build secure command with constraints
         let mut cmd = Command::new("timeout");
         cmd.args(&[
             &self.config.max_execution_time_seconds.to_string(),
-            "nice", "-n", "10", // Lower CPU priority
-            "prlimit", 
+            "nice",
+            "-n",
+            "10", // Lower CPU priority
+            "prlimit",
             &format!("--memory={}", self.config.max_memory_mb * 1024 * 1024), // Memory limit
-            &format!("--nproc=1"), // Limit processes
-            "unshare", "--mount", "--pid", "--fork", "--user", // Create new namespace
+            &format!("--nproc=1"),                                            // Limit processes
+            "unshare",
+            "--mount",
+            "--pid",
+            "--fork",
+            "--user",       // Create new namespace
             "--mount-proc", // Mount new proc filesystem
             &executable,
         ])
@@ -256,10 +292,10 @@ impl SecurityManager {
         .current_dir(session_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-        
+
         // Set up seccomp filtering if available
         self.apply_seccomp_filter(&mut cmd);
-        
+
         // Execute with timeout
         let output = match cmd.output() {
             Ok(output) => output,
@@ -277,7 +313,7 @@ impl SecurityManager {
                 });
             }
         };
-        
+
         let execution_time = start_time.elapsed().as_millis() as u64;
 
         // Get resource usage statistics
@@ -388,7 +424,7 @@ impl SecurityManager {
     /// Apply seccomp filtering for additional security
     fn apply_seccomp_filter(&self, _cmd: &mut Command) {
         tracing::debug!("Applying seccomp syscall filtering");
-        
+
         // Create minimal seccomp profile
         let _seccomp_profile = r#"
             #include <linux/seccomp.h>
@@ -404,7 +440,7 @@ impl SecurityManager {
             BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
             BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_KILL)
         "#;
-        
+
         // Note: In a full implementation, this would create a seccomp filter
         // and apply it to the process. For now, we just log the intent.
         tracing::info!("Seccomp filtering configured for sandboxed execution");
@@ -415,24 +451,30 @@ impl SecurityManager {
         match language.to_lowercase().as_str() {
             "python" => (
                 "python3".to_string(),
-                vec!["python3".to_string(), code_file.to_string()]
+                vec!["python3".to_string(), code_file.to_string()],
             ),
             "javascript" | "js" => (
                 "node".to_string(),
-                vec!["node".to_string(), code_file.to_string()]
+                vec!["node".to_string(), code_file.to_string()],
             ),
             "bash" | "shell" => (
                 "bash".to_string(),
-                vec!["bash".to_string(), code_file.to_string()]
+                vec!["bash".to_string(), code_file.to_string()],
             ),
             "rust" => (
                 "rustc".to_string(),
-                vec!["rustc".to_string(), "-O".to_string(), code_file.to_string(), "-o".to_string(), "a.out".to_string()]
+                vec![
+                    "rustc".to_string(),
+                    "-O".to_string(),
+                    code_file.to_string(),
+                    "-o".to_string(),
+                    "a.out".to_string(),
+                ],
             ),
             _ => (
                 "sh".to_string(),
-                vec!["sh".to_string(), code_file.to_string()]
-            )
+                vec!["sh".to_string(), code_file.to_string()],
+            ),
         }
     }
 
@@ -443,7 +485,7 @@ impl SecurityManager {
             "javascript" | "js" => "js",
             "rust" => "rs",
             "bash" | "shell" => "sh",
-            _ => "txt"
+            _ => "txt",
         }
     }
 
@@ -454,20 +496,20 @@ impl SecurityManager {
             "javascript" => vec!["node".to_string()],
             "bash" => vec!["bash".to_string(), "sh".to_string()],
             "rust" => vec!["rustc".to_string(), "./a.out".to_string()],
-            _ => vec!["sh".to_string()]
+            _ => vec!["sh".to_string()],
         }
     }
 
     /// Cleanup session resources
     async fn cleanup_session(&self, session_id: &str) {
         tracing::info!("Cleaning up sandbox session: {}", session_id);
-        
+
         // Remove from active sessions
         {
             let mut sessions = self.active_sessions.write().await;
             sessions.remove(session_id);
         }
-        
+
         // Remove session directory
         let session_dir = format!("/tmp/coderabbit_sandbox/{}", session_id);
         let _ = std::fs::remove_dir_all(&session_dir);
@@ -476,21 +518,23 @@ impl SecurityManager {
     /// Update security statistics
     async fn update_security_stats(&self, result: &Result<ExecutionResult>) {
         let mut stats = self.security_stats.write().await;
-        
+
         match result {
             Ok(execution_result) => {
                 if execution_result.success {
                     let current_avg = stats.average_execution_time_ms;
                     let new_count = stats.total_executions;
-                    stats.average_execution_time_ms = 
-                        (current_avg * (new_count - 1) as f64 + execution_result.execution_time_ms as f64) / new_count as f64;
-                    
+                    stats.average_execution_time_ms = (current_avg * (new_count - 1) as f64
+                        + execution_result.execution_time_ms as f64)
+                        / new_count as f64;
+
                     if execution_result.memory_used_kb > stats.max_memory_used_kb {
                         stats.max_memory_used_kb = execution_result.memory_used_kb;
                     }
-                    
+
                     if !execution_result.sandbox_violations.is_empty() {
-                        stats.sandbox_violations += execution_result.sandbox_violations.len() as u64;
+                        stats.sandbox_violations +=
+                            execution_result.sandbox_violations.len() as u64;
                         stats.security_score -= 0.1;
                     }
                 } else {
@@ -503,7 +547,7 @@ impl SecurityManager {
                 stats.security_score -= 1.0;
             }
         }
-        
+
         // Ensure security score doesn't go below 0
         stats.security_score = stats.security_score.max(0.0);
     }
@@ -517,13 +561,13 @@ impl SecurityManager {
     /// Check if sandbox environment is secure
     pub async fn validate_security(&self) -> Result<bool> {
         tracing::info!("Performing security validation");
-        
+
         // Check running as root
         if !Uid::current().is_root() {
             tracing::warn!("Not running as root - limited security capabilities");
             return Ok(false);
         }
-        
+
         // Check sandbox directory permissions
         let sandbox_dir = "/tmp/coderabbit_sandbox";
         match std::fs::metadata(sandbox_dir) {
@@ -539,7 +583,7 @@ impl SecurityManager {
                 return Ok(false);
             }
         }
-        
+
         // Check active sessions for security issues
         let sessions = self.active_sessions.read().await;
         for (session_id, session) in sessions.iter() {
@@ -549,7 +593,7 @@ impl SecurityManager {
                 return Ok(false);
             }
         }
-        
+
         tracing::info!("Security validation passed");
         Ok(true)
     }
@@ -563,24 +607,24 @@ impl SecurityManager {
     /// Terminate specific sandbox session
     pub async fn terminate_session(&self, session_id: &str) -> Result<()> {
         tracing::info!("Terminating sandbox session: {}", session_id);
-        
+
         let mut sessions = self.active_sessions.write().await;
-        
+
         if let Some(session) = sessions.remove(session_id) {
             // Kill process if running
             if let Some(pid) = session.pid {
-                let _ = Command::new("kill")
-                    .arg("-9")
-                    .arg(pid.to_string())
-                    .output();
+                let _ = Command::new("kill").arg("-9").arg(pid.to_string()).output();
             }
-            
+
             // Cleanup session directory
             let _ = std::fs::remove_dir_all(&session.working_directory);
-            
+
             Ok(())
         } else {
-            Err(CodeRabbitError::NotFound(format!("Session {} not found", session_id)))
+            Err(CodeRabbitError::NotFound(format!(
+                "Session {} not found",
+                session_id
+            )))
         }
     }
 }

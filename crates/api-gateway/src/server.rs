@@ -1,17 +1,13 @@
-use axum::{Router, serve};
+use axum::{serve, Router};
+use coderabbit_shared::{AppConfig, CodeRabbitError, Result};
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
-use tower_http::{
-    cors::CorsLayer,
-    trace::TraceLayer,
-    timeout::TimeoutLayer,
-};
-use std::time::Duration;
-use coderabbit_shared::{Result, CodeRabbitError, AppConfig};
+use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 
-use crate::routes::create_routes;
+use crate::handlers::database::{DatabaseConfig, DatabaseState};
 use crate::middleware::auth::AuthLayer;
-use crate::handlers::database::{DatabaseState, DatabaseConfig};
+use crate::routes::create_routes;
 
 pub struct ApiGateway {
     config: AppConfig,
@@ -24,11 +20,11 @@ impl ApiGateway {
 
     pub async fn start(&self) -> Result<()> {
         let app = self.create_app().await?;
-        
+
         let addr = format!("{}:{}", self.config.server.host, self.config.server.port);
-        let listener = TcpListener::bind(&addr)
-            .await
-            .map_err(|e| CodeRabbitError::InternalError(format!("Failed to bind to {}: {}", addr, e)))?;
+        let listener = TcpListener::bind(&addr).await.map_err(|e| {
+            CodeRabbitError::InternalError(format!("Failed to bind to {}: {}", addr, e))
+        })?;
 
         tracing::info!("API Gateway listening on {}", addr);
 

@@ -9,18 +9,17 @@
 /// - cargo-audit: Rust dependency auditing
 /// - Safety: Python dependency security
 /// - ESLint (security plugins): JavaScript/TypeScript security
-
 pub mod bandit;
-pub mod semgrep;
 pub mod gitleaks;
+pub mod semgrep;
 pub mod trivy;
 pub mod unified;
 
-pub use unified::{UnifiedScanner, UnifiedScanResult, UnifiedStats};
+pub use unified::{UnifiedScanResult, UnifiedScanner, UnifiedStats};
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use async_trait::async_trait;
 
 /// SAST tool type identifier
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -61,10 +60,19 @@ impl SastTool {
     /// Get recommended tools for a language
     pub fn for_language(language: &str) -> Vec<SastTool> {
         match language.to_lowercase().as_str() {
-            "python" => vec![SastTool::Bandit, SastTool::Semgrep, SastTool::Safety, SastTool::Gitleaks],
+            "python" => vec![
+                SastTool::Bandit,
+                SastTool::Semgrep,
+                SastTool::Safety,
+                SastTool::Gitleaks,
+            ],
             "rust" => vec![SastTool::Semgrep, SastTool::CargoAudit, SastTool::Gitleaks],
             "go" | "golang" => vec![SastTool::Gosec, SastTool::Semgrep, SastTool::Gitleaks],
-            "javascript" | "typescript" | "js" | "ts" => vec![SastTool::EslintSecurity, SastTool::Semgrep, SastTool::Gitleaks],
+            "javascript" | "typescript" | "js" | "ts" => vec![
+                SastTool::EslintSecurity,
+                SastTool::Semgrep,
+                SastTool::Gitleaks,
+            ],
             "java" => vec![SastTool::Semgrep, SastTool::Gitleaks],
             "c" | "cpp" | "c++" => vec![SastTool::Semgrep, SastTool::Gitleaks],
             "ruby" => vec![SastTool::Semgrep, SastTool::Gitleaks],
@@ -200,10 +208,7 @@ pub struct SastConfig {
 impl Default for SastConfig {
     fn default() -> Self {
         Self {
-            enabled_tools: vec![
-                SastTool::Semgrep,
-                SastTool::Gitleaks,
-            ],
+            enabled_tools: vec![SastTool::Semgrep, SastTool::Gitleaks],
             min_severity: SastSeverity::Medium,
             exclude_paths: vec![
                 "node_modules".to_string(),

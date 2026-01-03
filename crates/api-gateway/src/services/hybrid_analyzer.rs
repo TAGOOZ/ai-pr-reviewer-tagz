@@ -1,15 +1,11 @@
+use coderabbit_security::sast::{SastConfig, SastSeverity, UnifiedScanResult, UnifiedScanner};
 /// Hybrid Analysis Service
 ///
 /// Intelligently decides whether to clone repository for deep SAST analysis
 /// or use API-only approach for fast review.
-
 use coderabbit_shared::{
-    CloneDecisionEngine, CloneDecisionConfig, CloneDecision, CloneReason,
-    RepositoryManager, CloneOptions, RepositoryCache, RepositoryCacheConfig,
-    RepoConfig, FileChange,
-};
-use coderabbit_security::sast::{
-    UnifiedScanner, SastConfig, SastSeverity, UnifiedScanResult,
+    CloneDecision, CloneDecisionConfig, CloneDecisionEngine, CloneOptions, CloneReason, FileChange,
+    RepoConfig, RepositoryCache, RepositoryCacheConfig, RepositoryManager,
 };
 use std::path::PathBuf;
 use tracing;
@@ -66,10 +62,7 @@ impl HybridAnalyzer {
         let start_time = std::time::Instant::now();
 
         // Extract file paths for decision engine
-        let file_paths: Vec<String> = changed_files
-            .iter()
-            .map(|f| f.path.clone())
-            .collect();
+        let file_paths: Vec<String> = changed_files.iter().map(|f| f.path.clone()).collect();
 
         // Build clone decision config from repo config
         let decision_config = CloneDecisionConfig {
@@ -83,18 +76,18 @@ impl HybridAnalyzer {
 
         // Make clone decision
         let decision_engine = CloneDecisionEngine::new(decision_config);
-        let clone_decision = decision_engine.should_clone(
-            &file_paths,
-            labels,
-            pr_description,
-        );
+        let clone_decision = decision_engine.should_clone(&file_paths, labels, pr_description);
 
         tracing::info!(
             "Clone decision for {}/{}#{}: {} (reasons: {:?})",
             owner,
             repo_name,
             pr_number,
-            if clone_decision.should_clone { "CLONE" } else { "API-ONLY" },
+            if clone_decision.should_clone {
+                "CLONE"
+            } else {
+                "API-ONLY"
+            },
             clone_decision.reasons
         );
 
@@ -120,10 +113,7 @@ impl HybridAnalyzer {
 
             // Build clone URL with authentication
             let auth_clone_url = if clone_url.starts_with("https://") {
-                clone_url.replace(
-                    "https://",
-                    &format!("https://{}@", github_token)
-                )
+                clone_url.replace("https://", &format!("https://{}@", github_token))
             } else {
                 clone_url.to_string()
             };
@@ -137,14 +127,21 @@ impl HybridAnalyzer {
                 commit_sha: Some(head_sha.to_string()),
             };
 
-            let cloned_repo = self.repo_manager
+            let cloned_repo = self
+                .repo_manager
                 .clone_repository(clone_options)
                 .await
                 .map_err(|e| format!("Failed to clone repository: {}", e))?;
 
             // Add to cache
             self.cache
-                .put(owner, repo_name, pr_number, head_sha, cloned_repo.path.clone())
+                .put(
+                    owner,
+                    repo_name,
+                    pr_number,
+                    head_sha,
+                    cloned_repo.path.clone(),
+                )
                 .await
                 .map_err(|e| format!("Failed to cache repository: {}", e))?;
 

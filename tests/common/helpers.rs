@@ -1,8 +1,10 @@
+use coderabbit_cache_layer::{
+    l1_cache::L1Cache, l2_cache::L2Cache, multi_tier::MultiTierCache, CacheLayer,
+};
+use coderabbit_orchestrator::RedisOrchestrator;
+use coderabbit_shared::config::AppConfig;
 use std::sync::Arc;
 use tempfile::TempDir;
-use coderabbit_orchestrator::RedisOrchestrator;
-use coderabbit_cache_layer::{CacheLayer, l1_cache::L1Cache, l2_cache::L2Cache, multi_tier::MultiTierCache};
-use coderabbit_shared::config::AppConfig;
 
 /// Test configuration with sensible defaults
 pub fn test_config() -> AppConfig {
@@ -63,8 +65,8 @@ pub fn test_config() -> AppConfig {
 
 /// Create a test Redis orchestrator or return None if Redis unavailable
 pub async fn create_test_orchestrator() -> Option<Arc<RedisOrchestrator>> {
-    let redis_url = std::env::var("TEST_REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("TEST_REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
     match RedisOrchestrator::new(&redis_url) {
         Ok(orchestrator) => Some(Arc::new(orchestrator)),
@@ -76,15 +78,17 @@ pub async fn create_test_orchestrator() -> Option<Arc<RedisOrchestrator>> {
 pub async fn create_test_l1_cache() -> (Arc<L1Cache>, TempDir) {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let sled_path = temp_dir.path().to_str().unwrap();
-    let cache = L1Cache::new(sled_path).await.expect("Failed to create L1 cache");
+    let cache = L1Cache::new(sled_path)
+        .await
+        .expect("Failed to create L1 cache");
     (Arc::new(cache), temp_dir)
 }
 
 /// Create a test L2 cache or return None if Redis unavailable
 pub async fn create_test_l2_cache() -> Option<Arc<L2Cache>> {
-    let redis_url = std::env::var("TEST_REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
-    
+    let redis_url =
+        std::env::var("TEST_REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
     match L2Cache::new(&redis_url).await {
         Ok(cache) => {
             let _ = cache.clear().await;
@@ -98,9 +102,9 @@ pub async fn create_test_l2_cache() -> Option<Arc<L2Cache>> {
 pub async fn create_test_multi_tier_cache() -> Option<(Arc<MultiTierCache>, TempDir)> {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let sled_path = temp_dir.path().to_str().unwrap();
-    let redis_url = std::env::var("TEST_REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
-    
+    let redis_url =
+        std::env::var("TEST_REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
     match MultiTierCache::new(sled_path, &redis_url).await {
         Ok(cache) => {
             let _ = cache.clear().await;

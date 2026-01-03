@@ -1,8 +1,8 @@
-use axum::{Json, http::StatusCode, Extension};
-use serde::{Deserialize, Serialize};
-use crate::services::IndexingService;
 use crate::handlers::webhook::RAG_ORCHESTRATOR;
+use crate::services::IndexingService;
+use axum::{http::StatusCode, Extension, Json};
 use coderabbit_shared::AppConfig;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
@@ -24,32 +24,29 @@ pub struct IndexingResponse {
 /// Index a repository for RAG context retrieval
 pub async fn index_repository(
     Extension(config): Extension<Arc<AppConfig>>,
-    Json(payload): Json<IndexingRequest>
+    Json(payload): Json<IndexingRequest>,
 ) -> Result<Json<IndexingResponse>, StatusCode> {
-    tracing::info!("Indexing repository: {}/{}", payload.owner, payload.repo_name);
+    tracing::info!(
+        "Indexing repository: {}/{}",
+        payload.owner,
+        payload.repo_name
+    );
 
     // Get RAG orchestrator
     let rag_guard = RAG_ORCHESTRATOR.lock().await;
-    let orchestrator_arc = rag_guard.as_ref()
-        .ok_or_else(|| {
-            tracing::error!("RAG orchestrator not initialized");
-            StatusCode::SERVICE_UNAVAILABLE
-        })?;
+    let orchestrator_arc = rag_guard.as_ref().ok_or_else(|| {
+        tracing::error!("RAG orchestrator not initialized");
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
 
     // Get GitHub token
-    let github_token = config.git_providers.github_token
-        .clone()
-        .ok_or_else(|| {
-            tracing::error!("GitHub token not configured");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let github_token = config.git_providers.github_token.clone().ok_or_else(|| {
+        tracing::error!("GitHub token not configured");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Create indexing service
-    let indexing_service = IndexingService::new(
-        orchestrator_arc.clone(),
-        github_token,
-        None,
-    );
+    let indexing_service = IndexingService::new(orchestrator_arc.clone(), github_token, None);
 
     // Index repository
     let request = crate::services::indexing_service::IndexingRequest {
@@ -59,7 +56,9 @@ pub async fn index_repository(
         branch: payload.branch,
     };
 
-    let result = indexing_service.index_repository(request).await
+    let result = indexing_service
+        .index_repository(request)
+        .await
         .map_err(|e| {
             tracing::error!("Indexing failed: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR

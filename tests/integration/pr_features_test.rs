@@ -1,13 +1,15 @@
+use axum::extract::{Path, Query};
 /// Integration tests for PR features: Summarization, Suggestions, Issue Validation
 use coderabbit_api_gateway::handlers::pr_features;
-use axum::extract::{Path, Query};
 
 #[tokio::test]
 #[ignore] // Run with: cargo test --test pr_features_test -- --ignored
 async fn test_generate_pr_summary() {
     // Set GitHub token
-    std::env::set_var("GITHUB_TOKEN",
-        std::env::var("GITHUB_TOKEN").unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string())
+    std::env::set_var(
+        "GITHUB_TOKEN",
+        std::env::var("GITHUB_TOKEN")
+            .unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string()),
     );
 
     let owner = "rust-lang".to_string();
@@ -18,13 +20,14 @@ async fn test_generate_pr_summary() {
         include_historical: Some(false),
     };
 
-    println!("\n📊 Generating PR Summary for {}/{}#{}", owner, repo, pr_number);
+    println!(
+        "\n📊 Generating PR Summary for {}/{}#{}",
+        owner, repo, pr_number
+    );
     println!("{}", "=".repeat(80));
 
-    let result = pr_features::generate_pr_summary(
-        Path((owner, repo, pr_number)),
-        Query(params),
-    ).await;
+    let result =
+        pr_features::generate_pr_summary(Path((owner, repo, pr_number)), Query(params)).await;
 
     match result {
         Ok(summary) => {
@@ -77,20 +80,23 @@ async fn test_generate_pr_summary() {
 #[tokio::test]
 #[ignore]
 async fn test_get_pr_suggestions() {
-    std::env::set_var("GITHUB_TOKEN",
-        std::env::var("GITHUB_TOKEN").unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string())
+    std::env::set_var(
+        "GITHUB_TOKEN",
+        std::env::var("GITHUB_TOKEN")
+            .unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string()),
     );
 
     let owner = "rust-lang".to_string();
     let repo = "rust".to_string();
     let pr_number = 114183;
 
-    println!("\n💡 Getting PR Suggestions for {}/{}#{}", owner, repo, pr_number);
+    println!(
+        "\n💡 Getting PR Suggestions for {}/{}#{}",
+        owner, repo, pr_number
+    );
     println!("{}", "=".repeat(80));
 
-    let result = pr_features::get_pr_suggestions(
-        Path((owner, repo, pr_number)),
-    ).await;
+    let result = pr_features::get_pr_suggestions(Path((owner, repo, pr_number))).await;
 
     match result {
         Ok(suggestions) => {
@@ -101,7 +107,10 @@ async fn test_get_pr_suggestions() {
             for (i, suggestion) in suggestions_data.iter().enumerate().take(10) {
                 println!("{}. Suggestion ID: {}", i + 1, suggestion.id);
                 println!("   File: {}", suggestion.file_path);
-                println!("   Lines: {}-{}", suggestion.start_line, suggestion.end_line);
+                println!(
+                    "   Lines: {}-{}",
+                    suggestion.start_line, suggestion.end_line
+                );
                 println!("   Category: {}", suggestion.category);
                 println!("   Reason: {}", suggestion.reason);
                 println!("   Original: {}", suggestion.original_code);
@@ -110,7 +119,10 @@ async fn test_get_pr_suggestions() {
             }
 
             if suggestions_data.len() > 10 {
-                println!("   ... and {} more suggestions", suggestions_data.len() - 10);
+                println!(
+                    "   ... and {} more suggestions",
+                    suggestions_data.len() - 10
+                );
             }
 
             // Each suggestion should have required fields
@@ -132,28 +144,37 @@ async fn test_get_pr_suggestions() {
 #[tokio::test]
 #[ignore]
 async fn test_validate_pr_issues() {
-    std::env::set_var("GITHUB_TOKEN",
-        std::env::var("GITHUB_TOKEN").unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string())
+    std::env::set_var(
+        "GITHUB_TOKEN",
+        std::env::var("GITHUB_TOKEN")
+            .unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string()),
     );
 
     let owner = "rust-lang".to_string();
     let repo = "rust".to_string();
     let pr_number = 114183;
 
-    println!("\n🔍 Validating Issues for PR {}/{}#{}", owner, repo, pr_number);
+    println!(
+        "\n🔍 Validating Issues for PR {}/{}#{}",
+        owner, repo, pr_number
+    );
     println!("{}", "=".repeat(80));
 
-    let result = pr_features::validate_pr_issues(
-        Path((owner, repo, pr_number)),
-    ).await;
+    let result = pr_features::validate_pr_issues(Path((owner, repo, pr_number))).await;
 
     match result {
         Ok(validation) => {
             let validation_data = validation.0;
 
             println!("\n✅ Issue Validation Complete!\n");
-            println!("🎯 Validation Status: {}", validation_data.validation_status);
-            println!("\n📎 Linked Issues ({}):", validation_data.linked_issues.len());
+            println!(
+                "🎯 Validation Status: {}",
+                validation_data.validation_status
+            );
+            println!(
+                "\n📎 Linked Issues ({}):",
+                validation_data.linked_issues.len()
+            );
 
             for issue in &validation_data.linked_issues {
                 println!("  - Issue #{}: {}", issue.number, issue.title);
@@ -169,7 +190,10 @@ async fn test_validate_pr_issues() {
             }
 
             if !validation_data.related_issues.is_empty() {
-                println!("\n🔗 Related Issues ({}):", validation_data.related_issues.len());
+                println!(
+                    "\n🔗 Related Issues ({}):",
+                    validation_data.related_issues.len()
+                );
                 for issue in &validation_data.related_issues {
                     println!("  - Issue #{}: {}", issue.number, issue.title);
                 }
@@ -177,7 +201,8 @@ async fn test_validate_pr_issues() {
 
             // Assertions
             assert!(validation_data.pr_number == pr_number);
-            assert!(["valid", "partial", "invalid"].contains(&validation_data.validation_status.as_str()));
+            assert!(["valid", "partial", "invalid"]
+                .contains(&validation_data.validation_status.as_str()));
         }
         Err((status, error)) => {
             println!("❌ Failed to validate issues: {} - {:?}", status, error);
@@ -194,8 +219,10 @@ async fn test_validate_pr_issues() {
 #[tokio::test]
 #[ignore]
 async fn test_full_pr_features_workflow() {
-    std::env::set_var("GITHUB_TOKEN",
-        std::env::var("GITHUB_TOKEN").unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string())
+    std::env::set_var(
+        "GITHUB_TOKEN",
+        std::env::var("GITHUB_TOKEN")
+            .unwrap_or_else(|_| "ghp_fake_token_for_testing_only".to_string()),
     );
 
     let owner = "rust-lang".to_string();
@@ -216,21 +243,27 @@ async fn test_full_pr_features_workflow() {
     let summary_result = pr_features::generate_pr_summary(
         Path((owner.clone(), repo.clone(), pr_number)),
         Query(summary_params),
-    ).await;
+    )
+    .await;
 
     assert!(summary_result.is_ok(), "Summary generation should succeed");
     let summary = summary_result.unwrap().0;
     println!("✅ Summary: {}", summary.high_level_summary);
     println!("   Risk Level: {}", summary.risk_level);
-    println!("   Components Affected: {}", summary.affected_components.len());
+    println!(
+        "   Components Affected: {}",
+        summary.affected_components.len()
+    );
 
     // Step 2: Get Suggestions
     println!("\n💡 Step 2/3: Getting Suggestions...");
-    let suggestions_result = pr_features::get_pr_suggestions(
-        Path((owner.clone(), repo.clone(), pr_number)),
-    ).await;
+    let suggestions_result =
+        pr_features::get_pr_suggestions(Path((owner.clone(), repo.clone(), pr_number))).await;
 
-    assert!(suggestions_result.is_ok(), "Suggestions retrieval should succeed");
+    assert!(
+        suggestions_result.is_ok(),
+        "Suggestions retrieval should succeed"
+    );
     let suggestions = suggestions_result.unwrap().0;
     println!("✅ Found {} suggestions", suggestions.len());
 
@@ -242,15 +275,16 @@ async fn test_full_pr_features_workflow() {
 
     // Step 3: Validate Issues
     println!("\n🔍 Step 3/3: Validating Issues...");
-    let validation_result = pr_features::validate_pr_issues(
-        Path((owner, repo, pr_number)),
-    ).await;
+    let validation_result = pr_features::validate_pr_issues(Path((owner, repo, pr_number))).await;
 
     if validation_result.is_ok() {
         let validation = validation_result.unwrap().0;
         println!("✅ Validation Status: {}", validation.validation_status);
         println!("   Linked Issues: {}", validation.linked_issues.len());
-        println!("   Missing Requirements: {}", validation.missing_requirements.len());
+        println!(
+            "   Missing Requirements: {}",
+            validation.missing_requirements.len()
+        );
     } else {
         println!("⚠️  Issue validation skipped (may require additional permissions)");
     }

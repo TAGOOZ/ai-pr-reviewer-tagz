@@ -1,7 +1,7 @@
+use chrono::{Duration, Utc};
+use coderabbit_shared::{CodeRabbitError, Result};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use chrono::{Duration, Utc};
-use coderabbit_shared::{Result, CodeRabbitError};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -33,13 +33,16 @@ impl JwtAuth {
             iat: now.timestamp(),
         };
 
-        encode(&Header::default(), &claims, &self.encoding_key)
-            .map_err(|e| CodeRabbitError::AuthenticationError(format!("Token generation failed: {}", e)))
+        encode(&Header::default(), &claims, &self.encoding_key).map_err(|e| {
+            CodeRabbitError::AuthenticationError(format!("Token generation failed: {}", e))
+        })
     }
 
     pub fn validate_token(&self, token: &str) -> Result<Claims> {
         decode::<Claims>(token, &self.decoding_key, &Validation::default())
             .map(|data| data.claims)
-            .map_err(|e| CodeRabbitError::AuthenticationError(format!("Token validation failed: {}", e)))
+            .map_err(|e| {
+                CodeRabbitError::AuthenticationError(format!("Token validation failed: {}", e))
+            })
     }
 }

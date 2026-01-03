@@ -1,9 +1,9 @@
-use coderabbit_shared::Result;
+use crate::storage::{VectorRecord, VectorStorage};
 use anyhow::anyhow;
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use crate::storage::{VectorStorage, VectorRecord};
+use coderabbit_shared::Result;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
@@ -24,8 +24,8 @@ pub struct VectorEngine {
 impl VectorEngine {
     pub async fn new() -> Result<Self> {
         let storage = VectorStorage::new("code_vectors").await?;
-        let embedding_model = std::env::var("EMBEDDING_MODEL")
-            .unwrap_or_else(|_| "all-MiniLM-L6-v2".to_string());
+        let embedding_model =
+            std::env::var("EMBEDDING_MODEL").unwrap_or_else(|_| "all-MiniLM-L6-v2".to_string());
 
         let embedding_service_url = std::env::var("EMBEDDING_SERVICE_URL")
             .unwrap_or_else(|_| "http://localhost:8081".to_string());
@@ -35,7 +35,11 @@ impl VectorEngine {
             .build()
             .map_err(|e| anyhow!(e))?;
 
-        tracing::info!("Initialized Vector Engine with embedding model: {} at {}", embedding_model, embedding_service_url);
+        tracing::info!(
+            "Initialized Vector Engine with embedding model: {} at {}",
+            embedding_model,
+            embedding_service_url
+        );
         Ok(Self {
             storage,
             embedding_model: Some(embedding_model),
@@ -49,12 +53,18 @@ impl VectorEngine {
             return Ok(Vec::new());
         }
 
-        tracing::info!("Generating embeddings for {} texts using Python service", texts.len());
+        tracing::info!(
+            "Generating embeddings for {} texts using Python service",
+            texts.len()
+        );
 
         // Try to call Python embedding service first
         match self.generate_embeddings_via_service(&texts).await {
             Ok(embeddings) => {
-                tracing::info!("Generated {} embeddings via Python service", embeddings.len());
+                tracing::info!(
+                    "Generated {} embeddings via Python service",
+                    embeddings.len()
+                );
                 Ok(embeddings)
             }
             Err(e) => {
@@ -91,7 +101,8 @@ impl VectorEngine {
 
         let url = format!("{}/bridge/embedding_batch", self.embedding_service_url);
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .json(&request)
             .send()
@@ -100,14 +111,14 @@ impl VectorEngine {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(anyhow!("Embedding service returned {}: {}", status, error_text).into());
         }
 
-        let embeddings: Vec<Vec<f32>> = response
-            .json()
-            .await
-            .map_err(|e| anyhow!(e))?;
+        let embeddings: Vec<Vec<f32>> = response.json().await.map_err(|e| anyhow!(e))?;
         Ok(embeddings)
     }
 
@@ -139,20 +150,34 @@ impl VectorEngine {
     }
 
     pub async fn similarity_search(&self, query: &[f32], k: usize) -> Result<Vec<SearchResult>> {
-        tracing::info!("Performing similarity search with k={}, vector dimension: {}", k, query.len());
-        
+        tracing::info!(
+            "Performing similarity search with k={}, vector dimension: {}",
+            k,
+            query.len()
+        );
+
         // Use LanceDB to find similar vectors
         let results = self.storage.query(query, k, None).await?;
-        
+
         let search_results: Vec<SearchResult> = results
             .into_iter()
             .map(|record| {
                 let similarity = self.cosine_similarity(query, &record.embedding);
                 let metadata = HashMap::from([
-                    ("language".to_string(), record.metadata.get("language").cloned().unwrap_or_default()),
-                    ("file_path".to_string(), record.metadata.get("file_path").cloned().unwrap_or_default()),
+                    (
+                        "language".to_string(),
+                        record.metadata.get("language").cloned().unwrap_or_default(),
+                    ),
+                    (
+                        "file_path".to_string(),
+                        record
+                            .metadata
+                            .get("file_path")
+                            .cloned()
+                            .unwrap_or_default(),
+                    ),
                 ]);
-                
+
                 SearchResult {
                     content: record.content,
                     similarity_score: similarity,
@@ -162,11 +187,15 @@ impl VectorEngine {
                 }
             })
             .collect();
-        
+
         // Sort by similarity score (highest first)
         let mut sorted_results = search_results;
-        sorted_results.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        sorted_results.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         Ok(sorted_results)
     }
 
@@ -175,7 +204,7 @@ impl VectorEngine {
         let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-        
+
         if norm_a == 0.0 || norm_b == 0.0 {
             0.0
         } else {
@@ -183,43 +212,57 @@ impl VectorEngine {
         }
     }
 
-    pub async fn batch_insert(&self, items: Vec<(String, Vec<f32>, HashMap<String, String>)>, contents: Vec<String>) -> Result<()> {
+    pub async fn batch_insert(
+        &self,
+        items: Vec<(String, Vec<f32>, HashMap<String, String>)>,
+        contents: Vec<String>,
+    ) -> Result<()> {
         tracing::info!("Batch inserting {} items into vector storage", items.len());
-        
+
         let records: Vec<VectorRecord> = VectorStorage::build_records(items, contents);
         self.storage.batch_insert(records).await?;
-        
+
         Ok(())
     }
 
     pub async fn create_index(&self, dimension: usize) -> Result<String> {
         tracing::info!("Creating vector index with dimension: {}", dimension);
-        
+
         self.storage.create_index("embedding", "disk_ann").await?;
-        let index_id = format!("embedding_index_{}_{}", dimension, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
-        
+        let index_id = format!(
+            "embedding_index_{}_{}",
+            dimension,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        );
+
         Ok(index_id)
     }
 
     pub async fn delete_by_metadata(&self, filter: HashMap<String, String>) -> Result<u64> {
         tracing::info!("Deleting vectors by metadata filter: {:?}", filter);
-        
+
         // This is a simplified implementation
         // In production, you'd want to use more sophisticated filtering
-        let results = self.storage.query(&vec![0.0; 1536], 10000, Some(filter.clone())).await?;
-        
+        let results = self
+            .storage
+            .query(&vec![0.0; 1536], 10000, Some(filter.clone()))
+            .await?;
+
         let mut deleted_count = 0;
         for record in results {
             self.storage.delete(&record.id).await?;
             deleted_count += 1;
         }
-        
+
         Ok(deleted_count)
     }
 
     pub async fn get_stats(&self) -> Result<VectorStats> {
         let storage_stats = self.storage.get_stats().await?;
-        
+
         Ok(VectorStats {
             total_vectors: storage_stats.total_records,
             index_size_bytes: storage_stats.index_size_bytes,
@@ -228,27 +271,43 @@ impl VectorEngine {
     }
 
     /// Search for code similar to the provided query code
-    pub async fn search_code_context(&self, query_code: &str, language: &str, k: usize) -> Result<Vec<SearchResult>> {
+    pub async fn search_code_context(
+        &self,
+        query_code: &str,
+        language: &str,
+        k: usize,
+    ) -> Result<Vec<SearchResult>> {
         // Generate embedding for query code
         let query_embedding = self.generate_simple_embedding(query_code)?;
-        
+
         // Add language filter
-        let filters = HashMap::from([
-            ("language".to_string(), language.to_string())
-        ]);
-        
+        let filters = HashMap::from([("language".to_string(), language.to_string())]);
+
         // Search in LanceDB
-        let results = self.storage.query(&query_embedding, k, Some(filters)).await?;
-        
+        let results = self
+            .storage
+            .query(&query_embedding, k, Some(filters))
+            .await?;
+
         let search_results: Vec<SearchResult> = results
             .into_iter()
             .map(|record| {
                 let similarity = self.cosine_similarity(&query_embedding, &record.embedding);
                 let metadata = HashMap::from([
-                    ("language".to_string(), record.metadata.get("language").cloned().unwrap_or_default()),
-                    ("file_path".to_string(), record.metadata.get("file_path").cloned().unwrap_or_default()),
+                    (
+                        "language".to_string(),
+                        record.metadata.get("language").cloned().unwrap_or_default(),
+                    ),
+                    (
+                        "file_path".to_string(),
+                        record
+                            .metadata
+                            .get("file_path")
+                            .cloned()
+                            .unwrap_or_default(),
+                    ),
                 ]);
-                
+
                 SearchResult {
                     content: record.content,
                     similarity_score: similarity,
@@ -258,7 +317,7 @@ impl VectorEngine {
                 }
             })
             .collect();
-        
+
         Ok(search_results)
     }
 }

@@ -1,11 +1,10 @@
+use crate::analyzer::{CodeAnalysisResult, CodeAnalyzer};
 /// RAG-enhanced code analyzer that retrieves similar code context
 /// for better PR reviews
-
-use coderabbit_shared::{Result, FileChange};
-use coderabbit_vector_engine::{VectorEngine, SearchResult};
+use coderabbit_shared::{FileChange, Result};
+use coderabbit_vector_engine::{SearchResult, VectorEngine};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::analyzer::{CodeAnalyzer, CodeAnalysisResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeContext {
@@ -71,7 +70,10 @@ impl RagCodeAnalyzer {
                     Some(engine)
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to initialize vector engine: {}. RAG features disabled.", e);
+                    tracing::warn!(
+                        "Failed to initialize vector engine: {}. RAG features disabled.",
+                        e
+                    );
                     None
                 }
             }
@@ -98,14 +100,20 @@ impl RagCodeAnalyzer {
         tracing::info!(
             "Analyzing {} files{} for repository: {}",
             files.len(),
-            if self.rag_enabled { " with RAG context" } else { "" },
+            if self.rag_enabled {
+                " with RAG context"
+            } else {
+                ""
+            },
             repository_id
         );
 
         let mut results = Vec::new();
 
         for file in files {
-            let result = self.analyze_single_file_with_context(file, repository_id).await?;
+            let result = self
+                .analyze_single_file_with_context(file, repository_id)
+                .await?;
             results.push(result);
         }
 
@@ -118,7 +126,10 @@ impl RagCodeAnalyzer {
         repository_id: &str,
     ) -> Result<RagAnalysisResult> {
         // Perform base code analysis
-        let analysis = self.base_analyzer.analyze_files(vec![file.clone()]).await?
+        let analysis = self
+            .base_analyzer
+            .analyze_files(vec![file.clone()])
+            .await?
             .into_iter()
             .next()
             .unwrap();
@@ -169,7 +180,9 @@ impl RagCodeAnalyzer {
         };
 
         // Retrieve context from vector database
-        let context = self.retrieve_context(&embedding, &file.language, repository_id).await?;
+        let context = self
+            .retrieve_context(&embedding, &file.language, repository_id)
+            .await?;
 
         Ok(RagAnalysisResult {
             analysis,
@@ -186,7 +199,11 @@ impl RagCodeAnalyzer {
     ) -> Result<CodeContext> {
         let engine = self.vector_engine.as_ref().unwrap();
 
-        tracing::debug!("Retrieving RAG context for language: {}, repo: {}", language, repository_id);
+        tracing::debug!(
+            "Retrieving RAG context for language: {}, repo: {}",
+            language,
+            repository_id
+        );
 
         // Search for similar code patterns (top 5)
         let similar_patterns = match engine.search_code_context("", language, 5).await {
@@ -282,7 +299,11 @@ impl RagCodeAnalyzer {
             .map(|result| HistoricalBug {
                 bug_id: result.id.clone(),
                 description: result.content,
-                fix_commit: result.metadata.get("fix_commit").cloned().unwrap_or_default(),
+                fix_commit: result
+                    .metadata
+                    .get("fix_commit")
+                    .cloned()
+                    .unwrap_or_default(),
                 similarity_score: result.similarity_score,
             })
             .collect())
@@ -307,7 +328,11 @@ impl RagCodeAnalyzer {
             .map(|result| BestPractice {
                 practice_id: result.id,
                 description: result.content,
-                category: result.metadata.get("category").cloned().unwrap_or_else(|| "general".to_string()),
+                category: result
+                    .metadata
+                    .get("category")
+                    .cloned()
+                    .unwrap_or_else(|| "general".to_string()),
                 relevance_score: result.similarity_score,
             })
             .collect())
@@ -326,10 +351,17 @@ impl RagCodeAnalyzer {
 
         let engine = self.vector_engine.as_ref().unwrap();
 
-        tracing::info!("Indexing {} files for repository: {}", files.len(), repository_id);
+        tracing::info!(
+            "Indexing {} files for repository: {}",
+            files.len(),
+            repository_id
+        );
 
         // Generate embeddings for all files
-        let contents: Vec<String> = files.iter().map(|(_, content, _)| content.clone()).collect();
+        let contents: Vec<String> = files
+            .iter()
+            .map(|(_, content, _)| content.clone())
+            .collect();
         let embeddings = engine.generate_embeddings(contents.clone()).await?;
 
         // Prepare records for batch insertion
@@ -389,7 +421,10 @@ mod tests {
             language: "rust".to_string(),
         }];
 
-        let results = analyzer.analyze_with_context(files, "test-repo").await.unwrap();
+        let results = analyzer
+            .analyze_with_context(files, "test-repo")
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert!(!results[0].rag_enhanced);
     }

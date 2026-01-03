@@ -1,7 +1,6 @@
+use coderabbit_code_analyzer::{CodeContext, RagAnalysisResult, RagCodeAnalyzer};
 /// RAG-enhanced orchestrator for context-aware PR reviews
-
-use coderabbit_shared::{Result, FileChange};
-use coderabbit_code_analyzer::{RagCodeAnalyzer, RagAnalysisResult, CodeContext};
+use coderabbit_shared::{FileChange, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -43,7 +42,10 @@ pub struct RagOrchestrator {
 
 impl RagOrchestrator {
     pub async fn new(rag_enabled: bool) -> Result<Self> {
-        tracing::info!("Initializing RAG orchestrator (RAG enabled: {})", rag_enabled);
+        tracing::info!(
+            "Initializing RAG orchestrator (RAG enabled: {})",
+            rag_enabled
+        );
 
         let rag_analyzer = if rag_enabled {
             match RagCodeAnalyzer::new(true).await {
@@ -52,7 +54,10 @@ impl RagOrchestrator {
                     Some(analyzer)
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to initialize RAG analyzer: {}. Proceeding without RAG.", e);
+                    tracing::warn!(
+                        "Failed to initialize RAG analyzer: {}. Proceeding without RAG.",
+                        e
+                    );
                     None
                 }
             }
@@ -165,7 +170,11 @@ impl RagOrchestrator {
         repository_id: String,
         files: Vec<(String, String, String)>, // (file_path, content, language)
     ) -> Result<usize> {
-        tracing::info!("Indexing repository {} ({} files)", repository_id, files.len());
+        tracing::info!(
+            "Indexing repository {} ({} files)",
+            repository_id,
+            files.len()
+        );
 
         let analyzer_guard = self.rag_analyzer.read().await;
         let analyzer = match analyzer_guard.as_ref() {
@@ -186,7 +195,11 @@ impl RagOrchestrator {
         language: &str,
         repository_id: &str,
     ) -> Result<CodeContext> {
-        tracing::debug!("Preparing review context for {} code in repo {}", language, repository_id);
+        tracing::debug!(
+            "Preparing review context for {} code in repo {}",
+            language,
+            repository_id
+        );
 
         let analyzer_guard = self.rag_analyzer.read().await;
         let analyzer = match analyzer_guard.as_ref() {

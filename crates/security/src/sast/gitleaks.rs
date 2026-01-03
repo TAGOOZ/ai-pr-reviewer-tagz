@@ -2,13 +2,12 @@
 ///
 /// Gitleaks is a SAST tool for detecting and preventing hardcoded secrets
 /// like passwords, API keys, and tokens in git repos.
-
 use super::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::path::Path;
-use tokio::process::Command;
 use std::time::Instant;
+use tokio::process::Command;
 
 pub struct GitleaksScanner {
     /// Path to gitleaks executable
@@ -84,7 +83,7 @@ impl SastScanner for GitleaksScanner {
         // Run gitleaks
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(config.timeout_seconds),
-            Command::new(&self.gitleaks_path).args(&args).output()
+            Command::new(&self.gitleaks_path).args(&args).output(),
         )
         .await
         .map_err(|_| "Gitleaks scan timed out".to_string())?
@@ -150,14 +149,11 @@ impl SastScanner for GitleaksScanner {
             // All secrets are considered high severity by default
             let severity = SastSeverity::Critical;
 
-            let secret = finding_json["Secret"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
+            let secret = finding_json["Secret"].as_str().unwrap_or("").to_string();
 
             // Redact part of the secret for security
             let redacted_secret = if secret.len() > 8 {
-                format!("{}***{}", &secret[..4], &secret[secret.len()-4..])
+                format!("{}***{}", &secret[..4], &secret[secret.len() - 4..])
             } else {
                 "***REDACTED***".to_string()
             };
@@ -180,26 +176,24 @@ impl SastScanner for GitleaksScanner {
                     .as_str()
                     .unwrap_or("unknown")
                     .to_string(),
-                line_number: finding_json["StartLine"]
-                    .as_u64()
-                    .map(|n| n as u32),
-                end_line_number: finding_json["EndLine"]
-                    .as_u64()
-                    .map(|n| n as u32),
-                column: finding_json["StartColumn"]
-                    .as_u64()
-                    .map(|n| n as u32),
+                line_number: finding_json["StartLine"].as_u64().map(|n| n as u32),
+                end_line_number: finding_json["EndLine"].as_u64().map(|n| n as u32),
+                column: finding_json["StartColumn"].as_u64().map(|n| n as u32),
                 code_snippet: None, // Gitleaks doesn't include full code snippet
                 cwe_id: Some("CWE-798".to_string()), // Use of Hard-coded Credentials
                 cve_id: None,
-                owasp_category: Some("A07:2021 - Identification and Authentication Failures".to_string()),
+                owasp_category: Some(
+                    "A07:2021 - Identification and Authentication Failures".to_string(),
+                ),
                 remediation: Some(
                     "Remove the hardcoded secret from the code. \
-                    Use environment variables or a secrets management system instead.".to_string()
+                    Use environment variables or a secrets management system instead."
+                        .to_string(),
                 ),
                 references: vec![
                     "https://cwe.mitre.org/data/definitions/798.html".to_string(),
-                    "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/".to_string(),
+                    "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+                        .to_string(),
                 ],
                 confidence: 0.95, // Gitleaks has high confidence
                 metadata: {

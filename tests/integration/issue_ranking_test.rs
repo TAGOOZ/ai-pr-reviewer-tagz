@@ -1,8 +1,6 @@
-/// Integration test for issue ranking and filtering system
-use coderabbit_shared::{
-    RankedIssue, IssueFilter, IssueSeverity, IssueCategory, RepoConfig,
-};
 use coderabbit_api_gateway::handlers::issue_filtering::apply_repo_config_to_filter;
+/// Integration test for issue ranking and filtering system
+use coderabbit_shared::{IssueCategory, IssueFilter, IssueSeverity, RankedIssue, RepoConfig};
 
 #[test]
 fn test_issue_severity_ordering() {
@@ -23,8 +21,9 @@ fn test_issue_severity_ordering() {
 
     println!("✅ Issues correctly sorted by priority:");
     for (i, issue) in issues.iter().enumerate() {
-        println!("   {}. {} {} - {} (priority: {})",
-            i+1,
+        println!(
+            "   {}. {} {} - {} (priority: {})",
+            i + 1,
             issue.severity.emoji(),
             issue.severity,
             issue.title,
@@ -87,14 +86,13 @@ fn test_filter_by_category() {
     println!("   Blocked 'style' category");
     println!("   Remaining: {}", filtered.len());
     assert_eq!(filtered.len(), 3);
-    assert!(!filtered.iter().any(|i| matches!(i.category, IssueCategory::Style)));
+    assert!(!filtered
+        .iter()
+        .any(|i| matches!(i.category, IssueCategory::Style)));
 
     // Allow only security and bug-risk
     let mut filter = IssueFilter::default();
-    filter.allowed_categories = vec![
-        IssueCategory::Security,
-        IssueCategory::BugRisk,
-    ];
+    filter.allowed_categories = vec![IssueCategory::Security, IssueCategory::BugRisk];
 
     let filtered = filter.apply(issues);
 
@@ -158,7 +156,11 @@ fn test_repo_config_integration() {
     config.reviews.min_severity = "error".to_string();
     config.reviews.max_comments = 15;
     config.rules.disabled = vec!["style".to_string(), "documentation".to_string()];
-    config.rules.enabled = vec!["security".to_string(), "bug-risk".to_string(), "performance".to_string()];
+    config.rules.enabled = vec![
+        "security".to_string(),
+        "bug-risk".to_string(),
+        "performance".to_string(),
+    ];
 
     println!("\n⚙️  Testing repository config integration");
     println!("   Config min severity: {}", config.reviews.min_severity);
@@ -172,8 +174,14 @@ fn test_repo_config_integration() {
     println!("\n   Applied filter:");
     println!("   - Min severity: {:?}", filter.min_severity);
     println!("   - Max issues: {:?}", filter.max_issues);
-    println!("   - Blocked categories: {} items", filter.blocked_categories.len());
-    println!("   - Allowed categories: {} items", filter.allowed_categories.len());
+    println!(
+        "   - Blocked categories: {} items",
+        filter.blocked_categories.len()
+    );
+    println!(
+        "   - Allowed categories: {} items",
+        filter.allowed_categories.len()
+    );
 
     // Check that config was applied correctly
     assert_eq!(filter.min_severity, Some(IssueSeverity::Error));
@@ -202,13 +210,12 @@ fn test_priority_calculation() {
     assert_eq!(info_style.priority_score, 110); // (1*100) + 10
 
     // Test with confidence multiplier
-    let low_confidence = create_issue_with_confidence(
-        "4",
-        IssueSeverity::Critical,
-        IssueCategory::Security,
-        0.5,
+    let low_confidence =
+        create_issue_with_confidence("4", IssueSeverity::Critical, IssueCategory::Security, 0.5);
+    println!(
+        "   Critical Security (50% confidence): {}",
+        low_confidence.priority_score
     );
-    println!("   Critical Security (50% confidence): {}", low_confidence.priority_score);
     assert_eq!(low_confidence.priority_score, 250); // 500 * 0.5
 }
 
@@ -226,7 +233,11 @@ fn test_complete_filtering_workflow() {
         create_issue("6", IssueSeverity::Warning, IssueCategory::Maintainability),
         create_issue("7", IssueSeverity::Info, IssueCategory::Documentation),
         create_issue("8", IssueSeverity::Info, IssueCategory::Style),
-        create_issue("9", IssueSeverity::Debug, IssueCategory::Other("test".to_string())),
+        create_issue(
+            "9",
+            IssueSeverity::Debug,
+            IssueCategory::Other("test".to_string()),
+        ),
     ];
 
     println!("   Initial issues: {}", issues.len());
@@ -244,8 +255,9 @@ fn test_complete_filtering_workflow() {
 
     println!("   - Top issues:");
     for (i, issue) in filtered.iter().enumerate() {
-        println!("     {}. {} {:?} - Priority: {}",
-            i+1,
+        println!(
+            "     {}. {} {:?} - Priority: {}",
+            i + 1,
             issue.severity.emoji(),
             issue.category,
             issue.priority_score

@@ -2,7 +2,6 @@
 ///
 /// This module provides support for repository-specific CodeRabbit configurations
 /// that allow teams to customize review behavior, ignore patterns, and rules.
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -287,9 +286,9 @@ impl Default for SastSettings {
     fn default() -> Self {
         Self {
             enabled: false, // Off by default for gradual rollout
-            tools: vec![], // Empty = use all available tools
+            tools: vec![],  // Empty = use all available tools
             min_severity: "medium".to_string(),
-            timeout_seconds: 300, // 5 minutes
+            timeout_seconds: 300,    // 5 minutes
             fail_on_critical: false, // Don't block PRs by default
             security_files_only: false,
             custom_rulesets: HashMap::new(),
@@ -320,7 +319,7 @@ pub struct CloningSettings {
 impl Default for CloningSettings {
     fn default() -> Self {
         Self {
-            enabled: true, // Enable smart cloning
+            enabled: true,       // Enable smart cloning
             always_clone: false, // Use intelligent decision
             large_pr_threshold: 50,
             clone_on_labels: vec![
@@ -364,8 +363,7 @@ impl Default for CacheSettings {
 impl RepoConfig {
     /// Load configuration from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self, String> {
-        serde_yaml::from_str(yaml)
-            .map_err(|e| format!("Failed to parse .coderabbit.yaml: {}", e))
+        serde_yaml::from_str(yaml).map_err(|e| format!("Failed to parse .coderabbit.yaml: {}", e))
     }
 
     /// Merge this config with a parent config (for inheritance)
@@ -376,13 +374,18 @@ impl RepoConfig {
 
         // Merge ignore patterns
         self.ignore.files.extend(parent.ignore.files.clone());
-        self.ignore.directories.extend(parent.ignore.directories.clone());
+        self.ignore
+            .directories
+            .extend(parent.ignore.directories.clone());
         self.ignore.paths.extend(parent.ignore.paths.clone());
-        self.ignore.extensions.extend(parent.ignore.extensions.clone());
+        self.ignore
+            .extensions
+            .extend(parent.ignore.extensions.clone());
 
         // Merge language configs
         for (lang, parent_config) in &parent.languages {
-            self.languages.entry(lang.clone())
+            self.languages
+                .entry(lang.clone())
                 .or_insert_with(|| parent_config.clone());
         }
 
@@ -390,7 +393,9 @@ impl RepoConfig {
         self.rules.enabled.extend(parent.rules.enabled.clone());
         self.rules.disabled.extend(parent.rules.disabled.clone());
         for (rule, parent_rule_config) in &parent.rules.custom {
-            self.rules.custom.entry(rule.clone())
+            self.rules
+                .custom
+                .entry(rule.clone())
                 .or_insert_with(|| parent_rule_config.clone());
         }
     }
@@ -509,7 +514,10 @@ chat:
         assert_eq!(config.reviews.comment_style, CommentStyle::Both);
 
         assert_eq!(config.ignore.directories.len(), 2);
-        assert!(config.ignore.directories.contains(&"node_modules".to_string()));
+        assert!(config
+            .ignore
+            .directories
+            .contains(&"node_modules".to_string()));
 
         assert!(config.languages.contains_key("rust"));
         assert!(config.rules.enabled.contains(&"security".to_string()));

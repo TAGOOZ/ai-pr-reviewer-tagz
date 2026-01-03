@@ -1,6 +1,6 @@
 use crate::cache::{CacheLayer, CacheStats};
 use async_trait::async_trait;
-use coderabbit_shared::{Result, CodeRabbitError};
+use coderabbit_shared::{CodeRabbitError, Result};
 use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -14,15 +14,19 @@ pub struct L2Cache {
 
 impl L2Cache {
     pub async fn new(redis_url: &str) -> Result<Self> {
-        let client = Client::open(redis_url)
-            .map_err(|e| CodeRabbitError::CacheError(format!("Failed to create Redis client: {}", e)))?;
+        let client = Client::open(redis_url).map_err(|e| {
+            CodeRabbitError::CacheError(format!("Failed to create Redis client: {}", e))
+        })?;
 
         // Test connection
-        let mut conn = client.get_async_connection().await
-            .map_err(|e| CodeRabbitError::CacheError(format!("Failed to connect to Redis: {}", e)))?;
+        let mut conn = client.get_async_connection().await.map_err(|e| {
+            CodeRabbitError::CacheError(format!("Failed to connect to Redis: {}", e))
+        })?;
 
         // Test connection with a simple command
-        let _: String = redis::cmd("PING").query_async(&mut conn).await
+        let _: String = redis::cmd("PING")
+            .query_async(&mut conn)
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("Redis ping failed: {}", e)))?;
 
         Ok(Self {
@@ -38,8 +42,9 @@ impl L2Cache {
     }
 
     async fn get_connection(&self) -> Result<redis::aio::Connection> {
-        self.client.get_async_connection().await
-            .map_err(|e| CodeRabbitError::CacheError(format!("Failed to get Redis connection: {}", e)))
+        self.client.get_async_connection().await.map_err(|e| {
+            CodeRabbitError::CacheError(format!("Failed to get Redis connection: {}", e))
+        })
     }
 
     async fn update_stats(&self, hit: bool) {
@@ -65,13 +70,14 @@ impl CacheLayer for L2Cache {
         T: for<'de> Deserialize<'de> + Send + Clone + Serialize + Sync,
     {
         let mut conn = self.get_connection().await?;
-        
+
         match conn.get::<_, Option<Vec<u8>>>(key).await {
             Ok(Some(data)) => {
                 // Try to decompress if it's compressed
                 let decompressed_data = if data.len() > 4 && &data[0..4] == b"LZ4\0" {
-                    lz4_flex::decompress_size_prepended(&data[4..])
-                        .map_err(|_| CodeRabbitError::CacheError("Decompression failed".to_string()))?
+                    lz4_flex::decompress_size_prepended(&data[4..]).map_err(|_| {
+                        CodeRabbitError::CacheError("Decompression failed".to_string())
+                    })?
                 } else {
                     data
                 };
@@ -91,7 +97,10 @@ impl CacheLayer for L2Cache {
                 self.update_stats(false).await;
                 Ok(None)
             }
-            Err(e) => Err(CodeRabbitError::CacheError(format!("L2 cache get error: {}", e))),
+            Err(e) => Err(CodeRabbitError::CacheError(format!(
+                "L2 cache get error: {}",
+                e
+            ))),
         }
     }
 
@@ -100,7 +109,7 @@ impl CacheLayer for L2Cache {
         T: Serialize + Send + Sync,
     {
         let mut conn = self.get_connection().await?;
-        
+
         let serialized = serde_json::to_vec(value)
             .map_err(|e| CodeRabbitError::CacheError(format!("Serialization error: {}", e)))?;
 
@@ -113,7 +122,9 @@ impl CacheLayer for L2Cache {
             serialized
         };
 
-        let _: () = conn.set_ex(key, data, ttl.as_secs()).await
+        let _: () = conn
+            .set_ex(key, data, ttl.as_secs())
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache set error: {}", e)))?;
 
         Ok(())
@@ -121,23 +132,29 @@ impl CacheLayer for L2Cache {
 
     async fn delete(&self, key: &str) -> Result<()> {
         let mut conn = self.get_connection().await?;
-        
-        let _: () = conn.del(key).await
+
+        let _: () = conn
+            .del(key)
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache delete error: {}", e)))?;
-        
+
         Ok(())
     }
 
     async fn invalidate(&self, pattern: &str) -> Result<()> {
         let mut conn = self.get_connection().await?;
-        
+
         // Use KEYS command for pattern matching (not ideal for production but works for now)
-        let keys: Vec<String> = redis::cmd("KEYS").arg(pattern).query_async(&mut conn).await
+        let keys: Vec<String> = redis::cmd("KEYS")
+            .arg(pattern)
+            .query_async(&mut conn)
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache scan error: {}", e)))?;
 
         if !keys.is_empty() {
-            let _: () = conn.del(&keys).await
-                .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache bulk delete error: {}", e)))?;
+            let _: () = conn.del(&keys).await.map_err(|e| {
+                CodeRabbitError::CacheError(format!("L2 cache bulk delete error: {}", e))
+            })?;
         }
 
         Ok(())
@@ -145,22 +162,27 @@ impl CacheLayer for L2Cache {
 
     async fn exists(&self, key: &str) -> Result<bool> {
         let mut conn = self.get_connection().await?;
-        
-        let exists: bool = conn.exists(key).await
+
+        let exists: bool = conn
+            .exists(key)
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache exists error: {}", e)))?;
-        
+
         Ok(exists)
     }
 
     async fn get_stats(&self) -> Result<CacheStats> {
         let mut conn = self.get_connection().await?;
-        
+
         // Get Redis INFO stats
-        let info: String = redis::cmd("INFO").arg("memory").query_async(&mut conn).await
+        let info: String = redis::cmd("INFO")
+            .arg("memory")
+            .query_async(&mut conn)
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache info error: {}", e)))?;
 
         let mut stats = self.stats.read().await.clone();
-        
+
         // Parse memory usage from INFO output
         for line in info.lines() {
             if line.starts_with("used_memory:") {
@@ -171,7 +193,9 @@ impl CacheLayer for L2Cache {
         }
 
         // Get total keys count
-        let db_size: u64 = redis::cmd("DBSIZE").query_async(&mut conn).await
+        let db_size: u64 = redis::cmd("DBSIZE")
+            .query_async(&mut conn)
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache dbsize error: {}", e)))?;
         stats.total_keys = db_size;
 
@@ -181,7 +205,9 @@ impl CacheLayer for L2Cache {
     async fn clear(&self) -> Result<()> {
         let mut conn = self.get_connection().await?;
 
-        let _: () = redis::cmd("FLUSHDB").query_async(&mut conn).await
+        let _: () = redis::cmd("FLUSHDB")
+            .query_async(&mut conn)
+            .await
             .map_err(|e| CodeRabbitError::CacheError(format!("L2 cache clear error: {}", e)))?;
 
         Ok(())
@@ -226,7 +252,10 @@ mod tests {
         };
 
         let value = "test_value".to_string();
-        cache.set("test_key", &value, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("test_key", &value, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<String> = cache.get("test_key").await.unwrap();
         assert_eq!(result, Some(value));
@@ -250,7 +279,10 @@ mod tests {
             None => return,
         };
 
-        cache.set("key", &"value".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key", &"value".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
         cache.delete("key").await.unwrap();
 
         let result: Option<String> = cache.get("key").await.unwrap();
@@ -264,7 +296,10 @@ mod tests {
             None => return,
         };
 
-        cache.set("exists_key", &123, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("exists_key", &123, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         assert!(cache.exists("exists_key").await.unwrap());
         assert!(!cache.exists("nonexistent").await.unwrap());
@@ -277,8 +312,14 @@ mod tests {
             None => return,
         };
 
-        cache.set("key1", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("key2", &"value2".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("key2", &"value2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         cache.clear().await.unwrap();
 
@@ -296,7 +337,10 @@ mod tests {
         };
 
         // Set with 1 second TTL
-        cache.set("expired_key", &"value".to_string(), Duration::from_secs(1)).await.unwrap();
+        cache
+            .set("expired_key", &"value".to_string(), Duration::from_secs(1))
+            .await
+            .unwrap();
 
         // Wait for expiration
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -312,9 +356,18 @@ mod tests {
             None => return,
         };
 
-        cache.set("user:123", &"data1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("user:456", &"data2".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("post:789", &"data3".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("user:123", &"data1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("user:456", &"data2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("post:789", &"data3".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         cache.invalidate("user:*").await.unwrap();
 
@@ -334,7 +387,10 @@ mod tests {
             None => return,
         };
 
-        cache.set("key1", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         // Trigger hits and misses
         let _: Option<String> = cache.get("key1").await.unwrap(); // hit
@@ -356,7 +412,10 @@ mod tests {
         // Create large value that should be compressed (> 1024 bytes)
         let large_value = "x".repeat(2000);
 
-        cache.set("large_key", &large_value, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("large_key", &large_value, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<String> = cache.get("large_key").await.unwrap();
         assert_eq!(result, Some(large_value));
@@ -382,7 +441,10 @@ mod tests {
             values: vec![1, 2, 3, 4, 5],
         };
 
-        cache.set("struct_key", &test_data, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("struct_key", &test_data, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<TestStruct> = cache.get("struct_key").await.unwrap();
         assert_eq!(result, Some(test_data));
@@ -400,11 +462,14 @@ mod tests {
         for i in 0..10 {
             let cache_clone = cache.clone();
             let handle = tokio::spawn(async move {
-                cache_clone.set(
-                    &format!("key_{}", i),
-                    &format!("value_{}", i),
-                    Duration::from_secs(60)
-                ).await.unwrap();
+                cache_clone
+                    .set(
+                        &format!("key_{}", i),
+                        &format!("value_{}", i),
+                        Duration::from_secs(60),
+                    )
+                    .await
+                    .unwrap();
             });
             handles.push(handle);
         }
@@ -426,8 +491,14 @@ mod tests {
             None => return,
         };
 
-        cache.set("key", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("key", &"value2".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("key", &"value2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<String> = cache.get("key").await.unwrap();
         assert_eq!(result, Some("value2".to_string()));
@@ -445,7 +516,10 @@ mod tests {
         map.insert("key1".to_string(), 100);
         map.insert("key2".to_string(), 200);
 
-        cache.set("json_key", &map, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("json_key", &map, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<HashMap<String, i32>> = cache.get("json_key").await.unwrap();
         assert_eq!(result, Some(map));

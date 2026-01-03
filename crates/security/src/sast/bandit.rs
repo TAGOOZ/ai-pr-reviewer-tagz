@@ -2,13 +2,12 @@
 ///
 /// Bandit is a tool designed to find common security issues in Python code.
 /// It scans Python files and reports security concerns with severity levels.
-
 use super::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::path::Path;
-use tokio::process::Command;
 use std::time::Instant;
+use tokio::process::Command;
 
 pub struct BanditScanner {
     /// Path to bandit executable
@@ -23,9 +22,7 @@ impl BanditScanner {
     }
 
     pub fn with_path(path: String) -> Self {
-        Self {
-            bandit_path: path,
-        }
+        Self { bandit_path: path }
     }
 }
 
@@ -67,7 +64,8 @@ impl SastScanner for BanditScanner {
         // Build exclude arguments
         let mut args = vec![
             "-r".to_string(), // Recursive
-            "-f".to_string(), "json".to_string(), // JSON output
+            "-f".to_string(),
+            "json".to_string(), // JSON output
             path.to_str().unwrap().to_string(),
         ];
 
@@ -91,7 +89,7 @@ impl SastScanner for BanditScanner {
         // Run bandit
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(config.timeout_seconds),
-            Command::new(&self.bandit_path).args(&args).output()
+            Command::new(&self.bandit_path).args(&args).output(),
         )
         .await
         .map_err(|_| "Bandit scan timed out".to_string())?
@@ -149,14 +147,9 @@ impl SastScanner for BanditScanner {
         let mut findings = Vec::new();
 
         for (idx, result) in results.iter().enumerate() {
-            let test_id = result["test_id"]
-                .as_str()
-                .unwrap_or("unknown")
-                .to_string();
+            let test_id = result["test_id"].as_str().unwrap_or("unknown").to_string();
 
-            let issue_severity = result["issue_severity"]
-                .as_str()
-                .unwrap_or("MEDIUM");
+            let issue_severity = result["issue_severity"].as_str().unwrap_or("MEDIUM");
 
             let severity = match issue_severity {
                 "HIGH" => SastSeverity::High,
@@ -165,9 +158,7 @@ impl SastScanner for BanditScanner {
                 _ => SastSeverity::Info,
             };
 
-            let issue_confidence = result["issue_confidence"]
-                .as_str()
-                .unwrap_or("MEDIUM");
+            let issue_confidence = result["issue_confidence"].as_str().unwrap_or("MEDIUM");
 
             let confidence = match issue_confidence {
                 "HIGH" => 0.9,
@@ -190,10 +181,7 @@ impl SastScanner for BanditScanner {
                     result["test_name"].as_str().unwrap_or("unknown"),
                     issue_confidence
                 ),
-                file_path: result["filename"]
-                    .as_str()
-                    .unwrap_or("unknown")
-                    .to_string(),
+                file_path: result["filename"].as_str().unwrap_or("unknown").to_string(),
                 line_number: result["line_number"].as_u64().map(|n| n as u32),
                 end_line_number: result["line_range"]
                     .as_array()
@@ -208,9 +196,7 @@ impl SastScanner for BanditScanner {
                     .map(|id| format!("CWE-{}", id)),
                 cve_id: None,
                 owasp_category: None,
-                remediation: result["more_info"]
-                    .as_str()
-                    .map(|s| format!("See: {}", s)),
+                remediation: result["more_info"].as_str().map(|s| format!("See: {}", s)),
                 references: result["more_info"]
                     .as_str()
                     .map(|s| vec![s.to_string()])
@@ -219,8 +205,13 @@ impl SastScanner for BanditScanner {
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
                     meta.insert("test_id".to_string(), test_id);
-                    meta.insert("test_name".to_string(),
-                        result["test_name"].as_str().unwrap_or("unknown").to_string());
+                    meta.insert(
+                        "test_name".to_string(),
+                        result["test_name"]
+                            .as_str()
+                            .unwrap_or("unknown")
+                            .to_string(),
+                    );
                     meta
                 },
             };

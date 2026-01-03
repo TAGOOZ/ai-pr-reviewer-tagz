@@ -1,12 +1,11 @@
+use coderabbit_orchestrator::RagOrchestrator;
 /// Codebase indexing service for RAG
 ///
 /// Indexes repositories into vector database for context-aware reviews
-
 use coderabbit_shared::Result;
-use coderabbit_orchestrator::RagOrchestrator;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexingRequest {
@@ -27,14 +26,18 @@ pub struct IndexingResult {
 pub struct IndexingService {
     orchestrator: Arc<RwLock<RagOrchestrator>>,
     github_token: String,
-    static_context_cache: Option<Arc<coderabbit_cache_layer::StaticContextCache<coderabbit_cache_layer::MultiTierCache>>>,
+    static_context_cache: Option<
+        Arc<coderabbit_cache_layer::StaticContextCache<coderabbit_cache_layer::MultiTierCache>>,
+    >,
 }
 
 impl IndexingService {
     pub fn new(
         orchestrator: Arc<RwLock<RagOrchestrator>>,
         github_token: String,
-        static_context_cache: Option<Arc<coderabbit_cache_layer::StaticContextCache<coderabbit_cache_layer::MultiTierCache>>>,
+        static_context_cache: Option<
+            Arc<coderabbit_cache_layer::StaticContextCache<coderabbit_cache_layer::MultiTierCache>>,
+        >,
     ) -> Self {
         tracing::info!("Indexing service initialized with CAG support");
         Self {
@@ -69,13 +72,20 @@ impl IndexingService {
 
         // Warmup static context cache (CAG layer) for faster PR reviews
         if let Some(cache) = &self.static_context_cache {
-            tracing::info!("Warming up static context cache for {}/{}", request.owner, request.repo_name);
+            tracing::info!(
+                "Warming up static context cache for {}/{}",
+                request.owner,
+                request.repo_name
+            );
             let file_contents: Vec<(String, String)> = files
                 .iter()
                 .map(|(path, content, _lang)| (path.clone(), content.clone()))
                 .collect();
 
-            match cache.warmup_repo_cache(&request.owner, &request.repo_name, file_contents).await {
+            match cache
+                .warmup_repo_cache(&request.owner, &request.repo_name, file_contents)
+                .await
+            {
                 Ok(warmup_result) => {
                     tracing::info!(
                         "Static context cache warmup complete: {} types cached, {} skipped",
@@ -91,7 +101,10 @@ impl IndexingService {
 
         // Index files using RAG orchestrator
         let orchestrator = self.orchestrator.read().await;
-        match orchestrator.index_repository(request.repository_id.clone(), files).await {
+        match orchestrator
+            .index_repository(request.repository_id.clone(), files)
+            .await
+        {
             Ok(count) => {
                 tracing::info!("Successfully indexed {} files", count);
                 Ok(IndexingResult {
@@ -135,11 +148,9 @@ impl IndexingService {
             .map_err(|e| anyhow::anyhow!("Request failed: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!(
-                "GitHub API returned status: {}",
-                response.status()
-            )
-            .into());
+            return Err(
+                anyhow::anyhow!("GitHub API returned status: {}", response.status()).into(),
+            );
         }
 
         #[derive(Deserialize)]
@@ -155,7 +166,9 @@ impl IndexingService {
             sha: String,
         }
 
-        let tree_response: TreeResponse = response.json().await
+        let tree_response: TreeResponse = response
+            .json()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to parse tree response: {}", e))?;
 
         // Filter to code files AND documentation files
@@ -213,7 +226,10 @@ impl IndexingService {
         let mut files = Vec::new();
 
         for file in code_files.iter().take(max_files) {
-            match self.fetch_file_content(&request.owner, &request.repo_name, &file.path).await {
+            match self
+                .fetch_file_content(&request.owner, &request.repo_name, &file.path)
+                .await
+            {
                 Ok(content) => {
                     let language = self.detect_language(&file.path);
                     files.push((file.path.clone(), content, language));
@@ -253,7 +269,9 @@ impl IndexingService {
             encoding: String,
         }
 
-        let content_response: ContentResponse = response.json().await
+        let content_response: ContentResponse = response
+            .json()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to parse content response: {}", e))?;
 
         if content_response.encoding == "base64" {

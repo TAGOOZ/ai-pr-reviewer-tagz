@@ -2,7 +2,7 @@ use crate::cache::{CacheLayer, CacheStats};
 use crate::l1_cache::L1Cache;
 use crate::l2_cache::L2Cache;
 use async_trait::async_trait;
-use coderabbit_shared::{Result, CodeRabbitError};
+use coderabbit_shared::{CodeRabbitError, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,10 +17,7 @@ impl MultiTierCache {
         let l1_cache = Arc::new(L1Cache::new(sled_path).await?);
         let l2_cache = Arc::new(L2Cache::new(redis_url).await?);
 
-        Ok(Self {
-            l1_cache,
-            l2_cache,
-        })
+        Ok(Self { l1_cache, l2_cache })
     }
 
     async fn promote_to_l1<T>(&self, key: &str, value: &T, ttl: Duration) -> Result<()>
@@ -47,10 +44,12 @@ impl CacheLayer for MultiTierCache {
         // Try L2 cache
         if let Some(value) = self.l2_cache.get::<T>(key).await? {
             tracing::debug!("Cache hit in L2 for key: {}", key);
-            
+
             // Promote to L1 cache with shorter TTL
-            let _ = self.promote_to_l1(key, &value, Duration::from_secs(300)).await;
-            
+            let _ = self
+                .promote_to_l1(key, &value, Duration::from_secs(300))
+                .await;
+
             return Ok(Some(value));
         }
 
@@ -65,13 +64,16 @@ impl CacheLayer for MultiTierCache {
         // Set in both caches
         // L1 cache gets shorter TTL for memory efficiency
         let l1_ttl = Duration::from_secs(std::cmp::min(ttl.as_secs(), 3600)); // Max 1 hour in L1
-        
+
         let l1_result = self.l1_cache.set(key, value, l1_ttl).await;
         let l2_result = self.l2_cache.set(key, value, ttl).await;
 
         // Return error if both failed
         match (l1_result, l2_result) {
-            (Err(e1), Err(e2)) => Err(CodeRabbitError::CacheError(format!("Both L1 and L2 cache set failed: L1: {}, L2: {}", e1, e2))),
+            (Err(e1), Err(e2)) => Err(CodeRabbitError::CacheError(format!(
+                "Both L1 and L2 cache set failed: L1: {}, L2: {}",
+                e1, e2
+            ))),
             _ => Ok(()),
         }
     }
@@ -113,7 +115,7 @@ impl CacheLayer for MultiTierCache {
         if self.l1_cache.exists(key).await? {
             return Ok(true);
         }
-        
+
         self.l2_cache.exists(key).await
     }
 
@@ -126,7 +128,8 @@ impl CacheLayer for MultiTierCache {
             hits: l1_stats.hits + l2_stats.hits,
             misses: l1_stats.misses + l2_stats.misses,
             hit_rate: {
-                let total_requests = l1_stats.hits + l1_stats.misses + l2_stats.hits + l2_stats.misses;
+                let total_requests =
+                    l1_stats.hits + l1_stats.misses + l2_stats.hits + l2_stats.misses;
                 let total_hits = l1_stats.hits + l2_stats.hits;
                 if total_requests > 0 {
                     total_hits as f64 / total_requests as f64
@@ -146,7 +149,10 @@ impl CacheLayer for MultiTierCache {
 
         // Return error if both failed
         match (l1_result, l2_result) {
-            (Err(e1), Err(e2)) => Err(CodeRabbitError::CacheError(format!("Both L1 and L2 cache clear failed: L1: {}, L2: {}", e1, e2))),
+            (Err(e1), Err(e2)) => Err(CodeRabbitError::CacheError(format!(
+                "Both L1 and L2 cache clear failed: L1: {}, L2: {}",
+                e1, e2
+            ))),
             _ => Ok(()),
         }
     }
@@ -187,7 +193,10 @@ mod tests {
         };
 
         // Set in both layers
-        cache.set("key", &"value".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key", &"value".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         // Get should hit L1
         let result: Option<String> = cache.get("key").await.unwrap();
@@ -202,7 +211,11 @@ mod tests {
         };
 
         // Set only in L2
-        cache.l2_cache.set("key", &"value".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .l2_cache
+            .set("key", &"value".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         // Get should hit L2 and promote to L1
         let result: Option<String> = cache.get("key").await.unwrap();
@@ -231,7 +244,10 @@ mod tests {
             None => return,
         };
 
-        cache.set("key", &"value".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key", &"value".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         // Verify in both layers
         let l1_result: Option<String> = cache.l1_cache.get("key").await.unwrap();
@@ -248,7 +264,10 @@ mod tests {
             None => return,
         };
 
-        cache.set("key", &"value".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key", &"value".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
         cache.delete("key").await.unwrap();
 
         // Verify deleted from both
@@ -266,8 +285,14 @@ mod tests {
             None => return,
         };
 
-        cache.set("user:123", &"data1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("user:456", &"data2".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("user:123", &"data1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("user:456", &"data2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         cache.invalidate("user:").await.unwrap();
 
@@ -285,8 +310,14 @@ mod tests {
             None => return,
         };
 
-        cache.set("key1", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
-        cache.set("key2", &"value2".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
+        cache
+            .set("key2", &"value2".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         cache.clear().await.unwrap();
 
@@ -304,7 +335,10 @@ mod tests {
             None => return,
         };
 
-        cache.set("key1", &"value1".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let _: Option<String> = cache.get("key1").await.unwrap(); // hit
         let _: Option<String> = cache.get("nonexistent").await.unwrap(); // miss
@@ -322,7 +356,11 @@ mod tests {
         };
 
         // Set only in L2
-        cache.l2_cache.set("key_l2", &"value".to_string(), Duration::from_secs(60)).await.unwrap();
+        cache
+            .l2_cache
+            .set("key_l2", &"value".to_string(), Duration::from_secs(60))
+            .await
+            .unwrap();
 
         // Should find it even though only in L2
         assert!(cache.exists("key_l2").await.unwrap());
@@ -337,7 +375,11 @@ mod tests {
         };
 
         // Set in L2 with long TTL
-        cache.l2_cache.set("key", &"value".to_string(), Duration::from_secs(3600)).await.unwrap();
+        cache
+            .l2_cache
+            .set("key", &"value".to_string(), Duration::from_secs(3600))
+            .await
+            .unwrap();
 
         // Get should promote to L1 with shorter TTL (capped at 1 hour)
         let _: Option<String> = cache.get("key").await.unwrap();
@@ -358,11 +400,14 @@ mod tests {
         for i in 0..10 {
             let cache_clone = cache.clone();
             let handle = tokio::spawn(async move {
-                cache_clone.set(
-                    &format!("key_{}", i),
-                    &format!("value_{}", i),
-                    Duration::from_secs(60)
-                ).await.unwrap();
+                cache_clone
+                    .set(
+                        &format!("key_{}", i),
+                        &format!("value_{}", i),
+                        Duration::from_secs(60),
+                    )
+                    .await
+                    .unwrap();
             });
             handles.push(handle);
         }
@@ -386,7 +431,10 @@ mod tests {
         };
 
         // Set with 10 hour TTL - L1 should cap at 1 hour
-        cache.set("key", &"value".to_string(), Duration::from_secs(36000)).await.unwrap();
+        cache
+            .set("key", &"value".to_string(), Duration::from_secs(36000))
+            .await
+            .unwrap();
 
         // Both should have the value
         assert!(cache.l1_cache.exists("key").await.unwrap());
@@ -411,7 +459,10 @@ mod tests {
             items: vec!["a".to_string(), "b".to_string()],
         };
 
-        cache.set("complex", &data, Duration::from_secs(60)).await.unwrap();
+        cache
+            .set("complex", &data, Duration::from_secs(60))
+            .await
+            .unwrap();
 
         let result: Option<TestData> = cache.get("complex").await.unwrap();
         assert_eq!(result, Some(data));
