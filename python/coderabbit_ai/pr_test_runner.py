@@ -1,6 +1,7 @@
 """PR Test Runner - Execute PR code and tests in isolated sandbox."""
 
 import logging
+import shlex
 import json
 import hashlib
 from typing import List, Dict, Any, Optional
@@ -248,7 +249,7 @@ class PRTestRunner:
             # Run test command
             try:
                 result = subprocess.run(
-                    test_command.split(),
+                    shlex.split(test_command),
                     cwd=tmpdir,
                     capture_output=True,
                     text=True,
