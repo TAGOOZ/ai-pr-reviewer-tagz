@@ -5,6 +5,7 @@ pub mod health;
 pub mod indexing;
 pub mod issue_filtering;
 pub mod jobs;
+pub mod metrics;
 pub mod pr_features;
 pub mod review;
 pub mod webhook;
