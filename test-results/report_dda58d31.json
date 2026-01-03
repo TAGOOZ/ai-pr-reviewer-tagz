@@ -1,0 +1,53 @@
+{
+  "run_id": "dda58d31",
+  "started_at": "2026-01-03T23:43:32.677822",
+  "completed_at": "2026-01-03T23:43:34.451780",
+  "duration_seconds": 1.773958,
+  "summary": {
+    "total_tests": 6,
+    "passed": 5,
+    "failed": 1,
+    "skipped": 0,
+    "pass_rate": "83.3%"
+  },
+  "issues": {
+    "summary": {
+      "critical": 1,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "total": 1
+    },
+    "details": [
+      {
+        "id": "66d2ba67",
+        "test_name": "test_api_gateway_health",
+        "component": "api_gateway",
+        "severity": "critical",
+        "category": "connectivity",
+        "message": "All connection attempts failed",
+        "stack_trace": "Traceback (most recent call last):\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_transports/default.py\", line 67, in map_httpcore_exceptions\n    yield\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_transports/default.py\", line 371, in handle_async_request\n    resp = await self._pool.handle_async_request(req)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_async/connection_pool.py\", line 256, in handle_async_request\n    raise exc from None\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_async/connection_pool.py\", line 236, in handle_async_request\n    response = await connection.handle_async_request(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_async/connection.py\", line 101, in handle_async_request\n    raise exc\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_async/connection.py\", line 78, in handle_async_request\n    stream = await self._connect(request)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_async/connection.py\", line 124, in _connect\n    stream = await self._network_backend.connect_tcp(**kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_backends/auto.py\", line 31, in connect_tcp\n    return await self._backend.connect_tcp(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_backends/anyio.py\", line 113, in connect_tcp\n    with map_exceptions(exc_map):\n         ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/contextlib.py\", line 158, in __exit__\n    self.gen.throw(value)\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpcore/_exceptions.py\", line 14, in map_exceptions\n    raise to_exc(exc) from exc\nhttpcore.ConnectError: All connection attempts failed\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/teamspace/studios/this_studio/ai-pr-reviewer-tagz/tests/system/health/test_health.py\", line 18, in test_api_gateway_health\n    response = await client.get(f\"{config.api_gateway_url}/health\")\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_client.py\", line 1786, in get\n    return await self.request(\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_client.py\", line 1559, in request\n    return await self.send(request, auth=auth, follow_redirects=follow_redirects)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_client.py\", line 1646, in send\n    response = await self._send_handling_auth(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_client.py\", line 1674, in _send_handling_auth\n    response = await self._send_handling_redirects(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_client.py\", line 1711, in _send_handling_redirects\n    response = await self._send_single_request(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_client.py\", line 1748, in _send_single_request\n    response = await transport.handle_async_request(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_transports/default.py\", line 370, in handle_async_request\n    with map_httpcore_exceptions():\n         ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/contextlib.py\", line 158, in __exit__\n    self.gen.throw(value)\n  File \"/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/httpx/_transports/default.py\", line 84, in map_httpcore_exceptions\n    raise mapped_exc(message) from exc\nhttpx.ConnectError: All connection attempts failed\n",
+        "logs": [],
+        "timestamp": "2026-01-03T23:43:32.992473",
+        "context": {
+          "url": "http://localhost:8080"
+        }
+      }
+    ]
+  },
+  "components": {
+    "health": {
+      "tests_run": 6,
+      "tests_passed": 5,
+      "tests_failed": 1,
+      "pass_rate": "83.3%",
+      "duration_seconds": 1.773784
+    }
+  },
+  "environment": {
+    "api_gateway_url": "http://localhost:8080",
+    "ai_pipeline_url": "http://localhost:8000",
+    "database_url": "postgresql://postgres.sskoefvbzqfxjyzndtzr:Coderab...",
+    "redis_url": "redis://localhost:6379"
+  }
+}
