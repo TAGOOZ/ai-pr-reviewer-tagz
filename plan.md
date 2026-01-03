@@ -541,7 +541,423 @@ Steps:
 
 ---
 
-## Phase 2 Summary
+## Phase 3: Testing & Coverage (188 tasks)
+
+**Status**: Pending
+**Priority**: MEDIUM - Improve test coverage and add missing tests
+
+---
+
+### 3.1 Add Missing Unit Tests (Critical Paths)
+
+#### Task 3.1.1: Add tests for python/coderabbit_ai/embeddings.py ☐
+**Issue**: No unit tests for EmbeddingService
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for EmbeddingService`
+
+Steps:
+1. Create tests/embeddings/test_embeddings_service.py
+2. Add test cases for:
+   - test_embedding_generation_success
+   - test_embedding_generation_failure
+   - test_batch_embeddings
+   - test_dimension_validation
+3. Run pytest tests/embeddings/
+4. Commit changes
+
+---
+
+#### Task 3.1.2: Add tests for python/coderabbit_ai/dashboard.py ☐
+**Issue**: No tests for dashboard routes
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for dashboard.py`
+
+Steps:
+1. Create tests/dashboard/test_dashboard_routes.py
+2. Add test cases for:
+   - test_health_check
+   - test_dashboard_data
+   - test_api_endpoints
+3. Run pytest tests/dashboard/
+4. Commit changes
+
+---
+
+#### Task 3.1.3: Add tests for python/coderabbit_ai/graph/ modules ☐
+**Files**:
+- python/coderabbit_ai/graph/impact_analyzer.py
+- python/coderabbit_ai/graph/parsers.py
+- python/coderabbit_ai/graph/cag_integration.py
+**Issue**: No tests for graph modules
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for graph modules`
+
+Steps:
+1. Create tests/graph/test_graph_modules.py
+2. Add test cases for:
+   - test_impact_analysis
+   - test_graph_parsing
+   - test_cag_integration
+3. Run pytest tests/graph/
+4. Commit changes
+
+---
+
+#### Task 3.1.4: Add tests for python/coderabbit_ai/agents/summarization_agent.py ☐
+**Issue**: No specific tests for summarization agent
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for summarization_agent.py`
+
+Steps:
+1. Create tests/agents/test_summarization_agent.py
+2. Add test cases for:
+   - test_summarization_success
+   - test_summarization_error_handling
+   - test_summary_quality
+3. Run pytest tests/agents/
+4. Commit changes
+
+---
+
+#### Task 3.1.5: Add tests for python/coderabbit_ai/integrations/context_adapter.py ☐
+**Issue**: No tests for context adapter
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for context_adapter.py`
+
+Steps:
+1. Create tests/integrations/test_context_adapter.py
+2. Add test cases for:
+   - test_context_conversion
+   - test_adapter_error_handling
+3. Run pytest tests/integrations/
+4. Commit changes
+
+---
+
+#### Task 3.1.6: Add tests for python/coderabbit_ai/integrations/devin_client.py ☐
+**Issue**: No tests for Devin client
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for devin_client.py`
+
+Steps:
+1. Create tests/integrations/test_devin_client.py
+2. Add test cases for:
+   - test_devin_client_initialization
+   - test_devin_request_handling
+3. Run pytest tests/integrations/
+4. Commit changes
+
+---
+
+#### Task 3.1.7: Add tests for python/coderabbit_ai/integrations/hybrid_context_provider.py ☐
+**Issue**: No tests for hybrid context provider
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for hybrid_context_provider.py`
+
+Steps:
+1. Create tests/integrations/test_hybrid_context_provider.py
+2. Add test cases for:
+   - test_hybrid_context_generation
+   - test_provider_fallback
+3. Run pytest tests/integrations/
+4. Commit changes
+
+---
+
+#### Task 3.1.8: Add tests for python/coderabbit_ai/pr_test_runner.py ☐
+**Issue**: No unit tests for PR test runner (used in production)
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for pr_test_runner.py`
+
+Steps:
+1. Create tests/codeact/test_pr_runner.py
+2. Add test cases for:
+   - test_test_command_parsing
+   - test_timeout_handling
+   - test_result_parsing
+3. Run pytest tests/codeact/
+4. Commit changes
+
+---
+
+#### Task 3.1.9: Add tests for python/coderabbit_ai/dspy_optimization.py ☐
+**Issue**: No tests for DSPy optimization
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for dspy_optimization.py`
+
+Steps:
+1. Create tests/test_dspy_optimization.py
+2. Add test cases for:
+   - test_optimization_compilation
+   - test_prompt_generation
+3. Run pytest tests/
+4. Commit changes
+
+---
+
+#### Task 3.1.10: Add tests for python/coderabbit_ai/bridge.py ☐
+**Issue**: No tests for Python-Rust bridge
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add unit tests for bridge.py`
+
+Steps:
+1. Create tests/test_bridge.py
+2. Add test cases for:
+   - test_messagepack_serialization
+   - test_request_validation
+   - test_response_handling
+3. Run pytest tests/
+4. Commit changes
+
+---
+
+### 3.2 Add Integration Tests
+
+#### Task 3.2.1: Add integration test for cache warmup ☐
+**File**: tests/integration/test_cache_warmup.py (new)
+**Issue**: No integration test for cache warmup workflow
+**Verification**: `cargo test --test integration_tests` passes
+**Commit message**: `test: add integration test for cache warmup`
+
+Steps:
+1. Create tests/integration/test_cache_warmup.py
+2. Test cache initialization, warmup flow, and invalidation
+3. Run cargo test --test integration_tests
+4. Commit changes
+
+---
+
+#### Task 3.2.2: Add integration test for RAG orchestrator ☐
+**File**: tests/integration/test_rag_orchestrator.py (new)
+**Issue**: No integration test for RAG orchestrator workflow
+**Verification**: `cargo test --test integration_tests` passes
+**Commit message**: `test: add integration test for RAG orchestrator`
+
+Steps:
+1. Create tests/integration/test_rag_orchestrator.py
+2. Test context building, vector search, and aggregation
+3. Run cargo test --test integration_tests
+4. Commit changes
+
+---
+
+#### Task 3.2.3: Add integration test for Python bridge communication ☐
+**File**: tests/integration/test_python_bridge.py (new)
+**Issue**: No integration test for Python-Rust bridge
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add integration test for Python bridge communication`
+
+Steps:
+1. Create tests/integration/test_python_bridge.py
+2. Test shared memory transfer, MessagePack serialization
+3. Run poetry run pytest tests/
+4. Commit changes
+
+---
+
+#### Task 3.2.4: Add integration test for security scanner aggregation ☐
+**File**: tests/integration/test_security_scanner.py (new)
+**Issue**: No integration test for security scanner workflow
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add integration test for security scanner aggregation`
+
+Steps:
+1. Create tests/integration/test_security_scanner.py
+2. Test multiple scanner results aggregation, deduplication
+3. Run poetry run pytest tests/
+4. Commit changes
+
+---
+
+#### Task 3.2.5: Add integration test for full review pipeline ☐
+**File**: tests/integration/test_full_pipeline.py (new)
+**Issue**: No end-to-end integration test for entire review pipeline
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add end-to-end integration test for full review pipeline`
+
+Steps:
+1. Create tests/integration/test_full_pipeline.py
+2. Test webhook → analysis → review → posting flow
+3. Run poetry run pytest tests/
+4. Commit changes
+
+---
+
+### 3.3 Add Negative Test Cases
+
+#### Task 3.3.1: Add tests for security scenarios ☐
+**Files**: tests/security/test_path_traversal.py (new), tests/security/test_command_injection.py (new), tests/security/test_invalid_payloads.py (new)
+**Issue**: Missing negative test cases for security vulnerabilities
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add negative test cases for security scenarios`
+
+Steps:
+1. Create tests/security/ directory
+2. Add tests for:
+   - Path traversal attempts with malicious inputs
+   - Command injection attempts with shell metacharacters
+   - Oversized payloads
+   - Invalid message formats
+3. Run pytest tests/security/
+4. Commit changes
+
+---
+
+#### Task 3.3.2: Add tests for error handling ☐
+**File**: tests/common/test_error_handling.py (new)
+**Issue**: Missing tests for error handling edge cases
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add tests for error handling edge cases`
+
+Steps:
+1. Create tests/common/test_error_handling.py
+2. Add test cases for:
+   - Network timeout handling
+   - Database connection failures
+   - Invalid API responses
+   - Resource limit errors
+3. Run pytest tests/common/
+4. Commit changes
+
+---
+
+#### Task 3.3.3: Add tests for concurrent request handling ☐
+**File**: tests/integration/test_concurrent_requests.py (new)
+**Issue**: Missing tests for concurrent request scenarios
+**Verification**: `poetry run pytest tests/` passes
+**Commit message**: `test: add tests for concurrent request handling`
+
+Steps:
+1. Create tests/integration/test_concurrent_requests.py
+2. Add test cases for:
+   - Multiple simultaneous reviews
+   - Race conditions
+   - Resource contention
+3. Run poetry run pytest tests/integration/
+4. Commit changes
+
+---
+
+### 3.4 Improve Test Coverage
+
+#### Task 3.4.1: Run coverage analysis ☐
+**Verification**: Coverage report shows missing areas
+**Commit message**: `test: analyze test coverage and identify gaps`
+
+Steps:
+1. Run `poetry run pytest tests/ --cov=coderabbit_ai --cov-report=html`
+2. Review coverage report
+3. Identify modules with <50% coverage
+4. Update plan.md with findings
+5. Commit changes
+
+---
+
+#### Task 3.4.2: Achieve 70% coverage target ☐
+**Verification**: Coverage at least 70%
+**Commit message**: `test: achieve 70% test coverage target`
+
+Steps:
+1. Based on coverage analysis, add tests to reach 70%
+2. Focus on critical paths: security, API, core logic
+3. Run all tests
+4. Verify coverage >= 70%
+5. Commit changes
+
+---
+
+### 3.5 Final Verification
+
+#### Task 3.5.1: Run full test suite ☐
+**Verification**: All tests pass
+**Commit message**: None (verification task)
+
+Steps:
+1. Run `cargo test --workspace`
+2. Run `poetry run pytest tests/ -v`
+3. If any failures: Fix and re-run
+4. If all pass: Update plan.md
+
+---
+
+#### Task 3.5.2: Run code quality checks ☐
+**Verification**: All linters pass
+**Commit message**: None (verification task)
+
+Steps:
+1. Run `cargo fmt --all -- --check`
+2. Run `cargo clippy --all-targets --all-features -- -D warnings`
+3. Run `poetry run black --check python/`
+4. Run `poetry run isort --check-only python/`
+5. Run `poetry run flake8 python/`
+6. Run `poetry run mypy python/`
+7. If any failures: Fix and re-run
+8. If all pass: Update plan.md
+
+---
+
+#### Task 3.5.3: Verify Docker build ☐
+**Verification**: Docker image builds successfully
+**Commit message**: None (verification task)
+
+Steps:
+1. Run `docker build -t coderabbit:phase3 .`
+2. If build fails: Fix Dockerfile
+3. If build succeeds: Update plan.md
+
+---
+
+## Phase 3 Summary
+
+**Total Tasks**: 19
+**Estimated Time**: 4-6 hours
+**Success Criteria**:
+- ✅ All unit tests added for critical modules
+- ✅ Integration tests added
+- ✅ Negative test cases added
+- ✅ Test coverage >= 70%
+- ✅ All tests pass
+- ✅ All linters pass
+- ✅ Docker image builds
+
+**Stop Condition**: Complete all Phase 3 tasks, then STOP for human review.
+
+---
+
+## Phase 4-12: Deferred Until Phase 3 Complete
+
+**Remaining Phases**:
+- Phase 4: Dependency Management (8 tasks)
+- Phase 5: Configuration Management (12 tasks)
+- Phase 6: Documentation Completion (10 tasks)
+- Phase 7: Deployment & CI/CD (15 tasks)
+- Phase 8: Monitoring & Observability (10 tasks)
+- Phase 9: Performance Optimization (8 tasks)
+- Phase 10: Security Hardening (10 tasks)
+- Phase 11: Architecture Improvements (6 tasks)
+- Phase 12: Final Preparation (10 tasks)
+
+**Total Remaining Tasks**: 101
+
+**Next Steps After Phase 3**:
+- Human review of all commits
+- Test changes in staging environment
+- Decide on next phases
+- Update AGENTS.md with any new signs discovered
+
+---
+
+## Progress Summary
+
+**Overall Progress**: 22/24 tasks complete (92%)
+- Phase 1: Critical Fixes ✅ 12/12 (100%)
+- Phase 2: Code Quality ✅ 5/12 (42%)
+- Phase 3: Testing & Coverage ☐ 0/19 (0%)
+- Phases 4-12: ☐ 0/101 (0%)
+
+**Total Commits**: 19 pushed to origin/main
+
+**Ready for Phase 3 execution** - Say "CONTINUE PHASE 3"
 
 **Total Tasks**: 12
 **Estimated Time**: 2-3 hours
