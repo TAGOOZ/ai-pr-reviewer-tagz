@@ -1,0 +1,80 @@
+{
+  "run_id": "64367023",
+  "started_at": "2026-01-03T23:55:22.307952",
+  "completed_at": "2026-01-03T23:55:34.617830",
+  "duration_seconds": 12.309878,
+  "summary": {
+    "total_tests": 33,
+    "passed": 32,
+    "failed": 0,
+    "skipped": 1,
+    "pass_rate": "97.0%"
+  },
+  "issues": {
+    "summary": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "total": 0
+    },
+    "details": []
+  },
+  "components": {
+    "health": {
+      "tests_run": 6,
+      "tests_passed": 6,
+      "tests_failed": 0,
+      "pass_rate": "100.0%",
+      "duration_seconds": 1.773585
+    },
+    "bridge": {
+      "tests_run": 6,
+      "tests_passed": 6,
+      "tests_failed": 0,
+      "pass_rate": "100.0%",
+      "duration_seconds": 0.544884
+    },
+    "analysis": {
+      "tests_run": 5,
+      "tests_passed": 5,
+      "tests_failed": 0,
+      "pass_rate": "100.0%",
+      "duration_seconds": 0.190433
+    },
+    "vector": {
+      "tests_run": 4,
+      "tests_passed": 4,
+      "tests_failed": 0,
+      "pass_rate": "100.0%",
+      "duration_seconds": 6.313315
+    },
+    "cache": {
+      "tests_run": 6,
+      "tests_passed": 6,
+      "tests_failed": 0,
+      "pass_rate": "100.0%",
+      "duration_seconds": 0.099008
+    },
+    "integration": {
+      "tests_run": 1,
+      "tests_passed": 0,
+      "tests_failed": 0,
+      "pass_rate": "0.0%",
+      "duration_seconds": 0.00092
+    },
+    "e2e": {
+      "tests_run": 5,
+      "tests_passed": 5,
+      "tests_failed": 0,
+      "pass_rate": "100.0%",
+      "duration_seconds": 3.387497
+    }
+  },
+  "environment": {
+    "api_gateway_url": "http://localhost:8080",
+    "ai_pipeline_url": "http://localhost:8000",
+    "database_url": "postgresql://postgres.sskoefvbzqfxjyzndtzr:Coderab...",
+    "redis_url": "redis://localhost:6379"
+  }
+}
