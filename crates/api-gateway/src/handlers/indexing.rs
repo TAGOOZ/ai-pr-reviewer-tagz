@@ -48,6 +48,7 @@ pub async fn index_repository(
     let indexing_service = IndexingService::new(
         orchestrator_arc.clone(),
         github_token,
+        None,
     );
 
     // Index repository
