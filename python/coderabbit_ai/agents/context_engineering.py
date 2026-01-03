@@ -46,8 +46,8 @@ class ContextEngineeringAgent(dspy.Module):
         if context_data.project_root:
             try:
                 hybrid_context_str = self._enrich_with_hybrid_context(context_data)
-                logger.info("Successfully enriched context with graph and DeepWiki analysis")
-            except Exception as e:
+                 logger.info("Successfully enriched context with graph and DeepWiki analysis")
+            except (SyntaxError, ValueError) as e:
                 logger.warning(f"Failed to enrich with hybrid context: {e}")
                 hybrid_context_str = ""
 
@@ -343,12 +343,12 @@ class ContextEngineeringAgent(dspy.Module):
                                 elif isinstance(node, ast.Import):
                                     features.append(f"Import: {node.names[0].name if node.names else 'unknown'}")
                                     
-                        except SyntaxError:
-                            # Skip syntax errors
-                            continue
-                            
-        except Exception as e:
-            features.append(f"AST parsing error: {str(e)}")
+        except SyntaxError:
+                             # Skip syntax errors
+                             continue
+                             
+         except (SyntaxError, ValueError) as e:
+             features.append(f"AST parsing error: {str(e)}")
         
         return f"AST Analysis:\n" + "\n".join(features[:20])  # Limit output
     
