@@ -16,7 +16,6 @@ pub struct SearchResult {
 
 pub struct VectorEngine {
     storage: VectorStorage,
-    embedding_model: Option<String>,
     http_client: Client,
     embedding_service_url: String,
 }
@@ -86,12 +85,6 @@ impl VectorEngine {
         struct EmbeddingRequest {
             code_snippets: Vec<String>,
             batch_size: u32,
-        }
-
-        #[derive(Deserialize)]
-        struct EmbeddingResponse {
-            embeddings_count: usize,
-            dimension: usize,
         }
 
         let request = EmbeddingRequest {

@@ -36,7 +36,6 @@ pub struct VectorStorage {
     // Enhanced LanceDB integration with RAG capabilities
     records: Arc<RwLock<HashMap<String, VectorRecord>>>,
     index_stats: Arc<RwLock<IndexStats>>,
-    rag_enabled: bool,
     max_results: usize,
 }
 
@@ -68,7 +67,6 @@ impl VectorStorage {
                 query_count: 0,
                 avg_query_time_ms: 0.0,
             })),
-            rag_enabled: true,
             max_results: 1000,
         };
 
