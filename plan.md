@@ -391,7 +391,61 @@ Steps:
 
 ---
 
-#### Task 2.2.3: Add missing type hints in Python ⚠️
+#### Task 2.3.1: Move root docs to docs/legacy/ ☐
+**Files**:
+- CODERABBIT_PR_63_ANALYSIS.md
+- GITHUB_OPERATIONS_DIAGRAMS.md (already in plan)
+- GITHUB_OPERATIONS_SUMMARY.md (already in plan)
+- FIXES_APPLIED.md
+- IMPLEMENTATION_COMPLETE.md
+- RAG_INTEGRATION_COMPLETE.md
+- DASHBOARD_README.md
+- PR_TEST_RUNNER_README.md
+- SANDBOX_INTEGRATION.md
+- SANDBOX_TEST_REPORT.md
+- SECURITY_CONCERNS.md
+- SYSTEM_ANALYSIS_IMPROVEMENTS.md
+**Issue**: Documentation scattered in root directory
+**Commit message**: `docs: consolidate root-level docs to docs/legacy/`
+
+Steps:
+1. Create docs/legacy/ directory if not exists
+2. Move files to docs/legacy/
+3. Update plan.md
+
+---
+
+#### Task 2.3.2: Move test scripts to tests/integration/ ☐
+**Files**:
+- test_dashboard.py
+- test_github_pr.py
+- test_astgrep_sandbox.py
+- test_sandbox_integration.py
+- test_sandbox_standalone.py
+- test_semgrep_integration.py
+- test_comment_formatting.py
+**Issue**: Test scripts scattered in root directory
+**Commit message**: `test: move root-level test scripts to tests/integration/`
+
+Steps:
+1. Move files to tests/integration/
+2. Update any imports/references
+3. Commit changes
+
+---
+
+#### Task 2.3.3: Move example files to docs/examples/ ☐
+**Files**:
+- github_pr_135229_review.json
+- github_pr_63_review.json
+- review_results.json
+**Issue**: Example data files scattered in root directory
+**Commit message**: `docs: move example JSON files to docs/examples/`
+
+Steps:
+1. Create docs/examples/ directory
+2. Move JSON files to docs/examples/
+3. Update plan.md
 **Files**:
 - python/coderabbit_ai/bridge.py
 - python/coderabbit_ai/server.py:88-129, 363-384
