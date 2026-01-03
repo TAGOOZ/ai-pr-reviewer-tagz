@@ -550,7 +550,8 @@ Steps:
 
 ### 3.1 Add Missing Unit Tests (Critical Paths)
 
-#### Task 3.1.1: Add tests for python/coderabbit_ai/embeddings.py ☐
+#### Task 3.1.1: Add tests for python/coderabbit_ai/embeddings.py ✅
+**Files**: tests/embeddings/test_embeddings_service.py (new)
 **Issue**: No unit tests for EmbeddingService
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for EmbeddingService`
