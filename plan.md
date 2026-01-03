@@ -628,7 +628,7 @@ Steps:
 
 ---
 
-#### Task 3.1.4: Add tests for python/coderabbit_ai/agents/summarization_agent.py ☐
+#### Task 3.1.4: Add tests for python/coderabbit_ai/agents/summarization_agent.py ✅
 **Issue**: No specific tests for summarization agent
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for summarization_agent.py`

@@ -91,7 +91,7 @@ def _save_to_redis_if_available(review_id: str, payload: Dict[str, Any]) -> None
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> None:
     """Application lifespan manager."""
     global pipeline
     
