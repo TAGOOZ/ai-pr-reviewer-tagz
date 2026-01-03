@@ -689,7 +689,7 @@ Steps:
 
 ---
 
-#### Task 3.1.8: Add tests for python/coderabbit_ai/pr_test_runner.py ☐
+#### Task 3.1.8: Add tests for python/coderabbit_ai/pr_test_runner.py ✅
 **Issue**: No unit tests for PR test runner (used in production)
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for pr_test_runner.py`
