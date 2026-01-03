@@ -584,7 +584,7 @@ Steps:
 
 ---
 
-#### Task 3.1.3: Add tests for python/coderabbit_ai/graph/ modules ☐
+#### Task 3.1.3: Add tests for python/coderabbit_ai/graph/ modules ✅
 **Files**:
 - python/coderabbit_ai/graph/impact_analyzer.py
 - python/coderabbit_ai/graph/parsers.py
