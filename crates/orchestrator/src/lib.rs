@@ -176,7 +176,7 @@ impl RedisOrchestrator {
         let response = match job {
             Job::ReviewRequest {
                 metadata,
-                _request,
+                request,
                 response_tx,
             } => {
                 let result = format!("Review processed successfully for job {}", metadata.job_id);
@@ -185,7 +185,7 @@ impl RedisOrchestrator {
             }
             Job::AnalysisRequest {
                 metadata,
-                _request,
+                request,
                 response_tx,
             } => {
                 let result = format!("Analysis completed for job {}", metadata.job_id);

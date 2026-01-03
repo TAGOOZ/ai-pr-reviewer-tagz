@@ -61,6 +61,7 @@ pub struct RepoContext {
 
 pub struct CodeAnalyzer {
     rule_engine: RuleEngine,
+    static_analyzer: StaticAnalyzer,
 }
 
 impl CodeAnalyzer {

@@ -18,6 +18,7 @@ pub struct VectorEngine {
     storage: VectorStorage,
     http_client: Client,
     embedding_service_url: String,
+    embedding_model: Option<String>,
 }
 
 impl VectorEngine {
