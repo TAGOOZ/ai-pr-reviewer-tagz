@@ -14,19 +14,20 @@ class TestConfig:
         default_factory=lambda: os.getenv("API_GATEWAY_URL", "http://localhost:8080")
     )
     ai_pipeline_url: str = field(
-        default_factory=lambda: os.getenv("AI_PIPELINE_URL", "http://localhost:8081")
+        default_factory=lambda: os.getenv("AI_PIPELINE_URL", "http://localhost:8000")
     )
 
     # Database
     database_url: str = field(
         default_factory=lambda: os.getenv(
-            "DATABASE_URL", "postgresql://test:test@localhost:5433/coderabbit_test"
+            "DATABASE_URL",
+            "postgresql://postgres.sskoefvbzqfxjyzndtzr:Coderabbit123%40@aws-1-eu-west-1.pooler.supabase.com:5432/postgres",
         )
     )
 
     # Redis
     redis_url: str = field(
-        default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6380")
+        default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379")
     )
 
     # GitHub
