@@ -139,7 +139,7 @@ class CodeRabbitMultiAgentPipeline(dspy.Module):
 
             # Source 2: Convert existing high-severity comments to security findings
             # This ensures SecurityAggregator runs even without AST-Grep
-            comment_security_findings = self._comments_to_security_findings(final_comments)
+            comment_            security_findings = self._comments_to_security_findings(comments)
             security_findings_list.extend(comment_security_findings)
             logger.info(f"Phase 3: Converted {len(comment_security_findings)} comments to security findings")
 
@@ -1366,13 +1366,6 @@ class PipelineOptimizer:
             "false_positives": total_fp,
             "missed_issues": total_fn,
         }
-
-    def _comments_to_security_findings(self, comments: List[ReviewComment]) -> List[SecurityFinding]:
-        """
-        Convert ReviewComments to SecurityFinding objects for aggregation.
-        Only converts comments with severity critical/high that look like security issues.
-        """
-        security_findings = []
         
         for comment in comments:
             # Only convert high-severity comments
