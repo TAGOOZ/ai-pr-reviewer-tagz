@@ -4,8 +4,13 @@ import dspy
 import hashlib
 import time
 import logging
+import ast
 from typing import Dict, Any, List, Optional, Tuple
-from ..models import ContextData, ContextEngineeringResponse, ContextEngineeringSignature
+from ..models import (
+    ContextData,
+    ContextEngineeringResponse,
+    ContextEngineeringSignature,
+)
 from collections import defaultdict, Counter
 import re
 import json
@@ -28,7 +33,7 @@ class ContextEngineeringAgent(dspy.Module):
 
         # New: Hybrid context provider for multi-layer analysis
         self.hybrid_provider = None  # Initialized on-demand per repository
-        
+
     def forward(self, context_data: ContextData) -> ContextEngineeringResponse:
         """
         Process repository data and generate enriched context.
@@ -46,7 +51,9 @@ class ContextEngineeringAgent(dspy.Module):
         if context_data.project_root:
             try:
                 hybrid_context_str = self._enrich_with_hybrid_context(context_data)
-                 logger.info("Successfully enriched context with graph and DeepWiki analysis")
+                logger.info(
+                    "Successfully enriched context with graph and DeepWiki analysis"
+                )
             except (SyntaxError, ValueError) as e:
                 logger.warning(f"Failed to enrich with hybrid context: {e}")
                 hybrid_context_str = ""
@@ -55,14 +62,20 @@ class ContextEngineeringAgent(dspy.Module):
         security_context_str = ""
         if context_data.security_findings:
             try:
-                security_context_str = self._format_security_findings(context_data.security_findings)
-                logger.info(f"Formatted {len(context_data.security_findings)} security findings")
+                security_context_str = self._format_security_findings(
+                    context_data.security_findings
+                )
+                logger.info(
+                    f"Formatted {len(context_data.security_findings)} security findings"
+                )
             except Exception as e:
                 logger.warning(f"Failed to format security findings: {e}")
                 security_context_str = ""
 
         # Convert static analysis results to string format
-        static_analysis_str = self._format_static_analysis(context_data.static_analysis_results)
+        static_analysis_str = self._format_static_analysis(
+            context_data.static_analysis_results
+        )
 
         # Generate AST features for code relationships
         ast_features = self._extract_ast_features(context_data.code_changes)
@@ -77,7 +90,7 @@ class ContextEngineeringAgent(dspy.Module):
             historical_data=context_data.historical_data,
             static_analysis_results=static_analysis_str,
             ast_features=ast_features,
-            rag_context=rag_context_str
+            rag_context=rag_context_str,
         )
 
         processing_time = int((time.time() - start_time) * 1000)
@@ -103,24 +116,61 @@ class ContextEngineeringAgent(dspy.Module):
                 "risk_assessment": result.risk_assessment,
                 "ast_complexity": len(ast_features),
                 "static_analysis_tools": len(context_data.static_analysis_results),
-                "historical_prs_analyzed": self._count_historical_prs(context_data.historical_data),
+                "historical_prs_analyzed": self._count_historical_prs(
+                    context_data.historical_data
+                ),
                 "rag_enabled": context_data.rag_context is not None,
-                "rag_patterns_found": len(context_data.rag_context.similar_patterns) if context_data.rag_context else 0,
-                "rag_issues_found": len(context_data.rag_context.related_issues) if context_data.rag_context else 0,
-                "rag_practices_found": len(context_data.rag_context.best_practices) if context_data.rag_context else 0,
+                "rag_patterns_found": (
+                    len(context_data.rag_context.similar_patterns)
+                    if context_data.rag_context
+                    else 0
+                ),
+                "rag_issues_found": (
+                    len(context_data.rag_context.related_issues)
+                    if context_data.rag_context
+                    else 0
+                ),
+                "rag_practices_found": (
+                    len(context_data.rag_context.best_practices)
+                    if context_data.rag_context
+                    else 0
+                ),
                 # Hybrid context metadata
                 "hybrid_context_enabled": context_data.hybrid_context is not None,
-                "context_sources": context_data.hybrid_context.context_sources if context_data.hybrid_context else [],
-                "graph_risk_level": context_data.hybrid_context.graph_context.risk_level if context_data.hybrid_context else "UNKNOWN",
-                "deepwiki_available": context_data.hybrid_context.deepwiki_context.available if context_data.hybrid_context and context_data.hybrid_context.deepwiki_context else False,
+                "context_sources": (
+                    context_data.hybrid_context.context_sources
+                    if context_data.hybrid_context
+                    else []
+                ),
+                "graph_risk_level": (
+                    context_data.hybrid_context.graph_context.risk_level
+                    if context_data.hybrid_context
+                    else "UNKNOWN"
+                ),
+                "deepwiki_available": (
+                    context_data.hybrid_context.deepwiki_context.available
+                    if context_data.hybrid_context
+                    and context_data.hybrid_context.deepwiki_context
+                    else False
+                ),
                 # NEW: Security findings metadata
                 "security_findings_count": len(context_data.security_findings),
-                "critical_security_issues": sum(1 for f in context_data.security_findings if f.severity == "critical"),
-                "high_security_issues": sum(1 for f in context_data.security_findings if f.severity == "high"),
-                "security_tools_used": list(set(f.tool for f in context_data.security_findings)) if context_data.security_findings else []
-            }
+                "critical_security_issues": sum(
+                    1
+                    for f in context_data.security_findings
+                    if f.severity == "critical"
+                ),
+                "high_security_issues": sum(
+                    1 for f in context_data.security_findings if f.severity == "high"
+                ),
+                "security_tools_used": (
+                    list(set(f.tool for f in context_data.security_findings))
+                    if context_data.security_findings
+                    else []
+                ),
+            },
         )
-    
+
     def _format_static_analysis(self, results: List[Dict[str, Any]]) -> str:
         """Format static analysis results into a readable string."""
         if not results:
@@ -143,12 +193,16 @@ class ContextEngineeringAgent(dspy.Module):
             # Format tool summary
             summary = f"{tool_name}: {len(issues)} issues"
             if severity_counts:
-                severity_summary = ", ".join([f"{count} {sev}" for sev, count in severity_counts.items()])
+                severity_summary = ", ".join(
+                    [f"{count} {sev}" for sev, count in severity_counts.items()]
+                )
                 summary += f" ({severity_summary})"
             formatted_results.append(summary)
 
             # Show top 3 most critical issues
-            critical_issues = [issue for issue in issues if issue.get("severity") == "critical"][:3]
+            critical_issues = [
+                issue for issue in issues if issue.get("severity") == "critical"
+            ][:3]
             for issue in critical_issues:
                 message = issue.get("message", "No message")[:100]
                 file_path = issue.get("file", "unknown file")
@@ -219,8 +273,10 @@ class ContextEngineeringAgent(dspy.Module):
                 continue
 
             formatted_sections.append(f"\n{'─' * 80}")
-            formatted_sections.append(f"{severity.upper()} SEVERITY ({len(items)} findings)")
-            formatted_sections.append('─' * 80)
+            formatted_sections.append(
+                f"{severity.upper()} SEVERITY ({len(items)} findings)"
+            )
+            formatted_sections.append("─" * 80)
 
             # Show top 10 per severity
             for i, finding in enumerate(items[:10], 1):
@@ -239,10 +295,14 @@ class ContextEngineeringAgent(dspy.Module):
                     formatted_sections.append(f"   🔗 {finding.cwe_id}")
 
                 if finding.confidence < 1.0:
-                    formatted_sections.append(f"   📈 Confidence: {finding.confidence:.0%}")
+                    formatted_sections.append(
+                        f"   📈 Confidence: {finding.confidence:.0%}"
+                    )
 
             if len(items) > 10:
-                formatted_sections.append(f"\n   ... and {len(items) - 10} more {severity} issues")
+                formatted_sections.append(
+                    f"\n   ... and {len(items) - 10} more {severity} issues"
+                )
 
         # Critical files section
         critical_files = set()
@@ -252,23 +312,35 @@ class ContextEngineeringAgent(dspy.Module):
 
         if critical_files:
             formatted_sections.append(f"\n{'─' * 80}")
-            formatted_sections.append(f"🚨 CRITICAL FILES ({len(critical_files)} files with high-risk issues)")
-            formatted_sections.append('─' * 80)
+            formatted_sections.append(
+                f"🚨 CRITICAL FILES ({len(critical_files)} files with high-risk issues)"
+            )
+            formatted_sections.append("─" * 80)
             for file in sorted(critical_files)[:20]:  # Top 20
-                file_findings = [f for f in finding_objects if f.file == file and f.severity in ["critical", "high"]]
+                file_findings = [
+                    f
+                    for f in finding_objects
+                    if f.file == file and f.severity in ["critical", "high"]
+                ]
                 formatted_sections.append(f"   • {file} ({len(file_findings)} issues)")
 
         # Recommendations
         formatted_sections.append(f"\n{'─' * 80}")
         formatted_sections.append("📋 RECOMMENDATIONS")
-        formatted_sections.append('─' * 80)
+        formatted_sections.append("─" * 80)
 
         if critical_count > 0:
-            formatted_sections.append("   ❌ BLOCK MERGE: Critical security vulnerabilities must be fixed before merging")
+            formatted_sections.append(
+                "   ❌ BLOCK MERGE: Critical security vulnerabilities must be fixed before merging"
+            )
         elif high_count >= 3:
-            formatted_sections.append("   ⚠️  CAUTION: Multiple high-severity issues found - review and fix recommended")
+            formatted_sections.append(
+                "   ⚠️  CAUTION: Multiple high-severity issues found - review and fix recommended"
+            )
         elif high_count > 0:
-            formatted_sections.append("   ⚠️  WARNING: High-severity issues detected - consider fixing before merge")
+            formatted_sections.append(
+                "   ⚠️  WARNING: High-severity issues detected - consider fixing before merge"
+            )
         else:
             formatted_sections.append("   ✅ No critical security issues detected")
 
@@ -322,48 +394,54 @@ class ContextEngineeringAgent(dspy.Module):
     def _extract_ast_features(self, code_changes: str) -> str:
         """Extract AST-based features from code changes."""
         features = []
-        
+
         try:
             # Parse code changes to extract AST information
-            lines = code_changes.split('\n')
+            lines = code_changes.split("\n")
             for line in lines[:50]:  # Limit to first 50 lines for efficiency
-                if line.strip().startswith('+') or line.strip().startswith('-'):
+                if line.strip().startswith("+") or line.strip().startswith("-"):
                     code_content = line.strip()[1:].strip()
                     if code_content and len(code_content) > 10:
                         try:
                             tree = ast.parse(code_content)
-                            features.append(f"AST Node: {type(tree.body[0]).__name__ if tree.body else 'Empty'}")
-                            
+                            features.append(
+                                f"AST Node: {type(tree.body[0]).__name__ if tree.body else 'Empty'}"
+                            )
+
                             # Extract function/method definitions
                             for node in ast.walk(tree):
                                 if isinstance(node, ast.FunctionDef):
-                                    features.append(f"Function: {node.name} ({len(node.args.args)} params)")
+                                    features.append(
+                                        f"Function: {node.name} ({len(node.args.args)} params)"
+                                    )
                                 elif isinstance(node, ast.ClassDef):
-                                    features.append(f"Class: {node.name} ({len(node.body)} methods)")
+                                    features.append(
+                                        f"Class: {node.name} ({len(node.body)} methods)"
+                                    )
                                 elif isinstance(node, ast.Import):
-                                    features.append(f"Import: {node.names[0].name if node.names else 'unknown'}")
-                                    
-        except SyntaxError:
-                             # Skip syntax errors
-                             continue
-                             
-         except (SyntaxError, ValueError) as e:
-             features.append(f"AST parsing error: {str(e)}")
-        
+                                    features.append(
+                                        f"Import: {node.names[0].name if node.names else 'unknown'}"
+                                    )
+                        except SyntaxError:
+                            # Skip syntax errors in individual lines
+                            continue
+        except (SyntaxError, ValueError) as e:
+            features.append(f"AST parsing error: {str(e)}")
+
         return f"AST Analysis:\n" + "\n".join(features[:20])  # Limit output
-    
+
     def _analyze_code_graph(self, file_changes: List[Dict[str, Any]]) -> str:
         """Analyze code relationships and dependencies."""
         relationships = []
-        
+
         # Extract imports and dependencies
         imports = defaultdict(list)
         function_calls = defaultdict(set)
-        
+
         for file_change in file_changes:
             file_path = file_change.get("path", "unknown")
             content = file_change.get("content", "")
-            
+
             try:
                 tree = ast.parse(content)
                 for node in ast.walk(tree):
@@ -376,62 +454,70 @@ class ContextEngineeringAgent(dspy.Module):
                             imports[file_path].append(f"{module}.{alias.name}")
                     elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                         function_calls[file_path].add(node.func.id)
-                        
+
             except SyntaxError:
                 continue
-        
+
         # Build relationship analysis
         relationships.append("Code Relationship Analysis:")
         relationships.append(f"Files analyzed: {len(file_changes)}")
-        relationships.append(f"Dependencies found: {sum(len(deps) for deps in imports.values())}")
-        
+        relationships.append(
+            f"Dependencies found: {sum(len(deps) for deps in imports.values())}"
+        )
+
         # Find circular dependencies
         all_imports = set()
         for deps in imports.values():
             all_imports.update(deps)
-        
+
         relationships.append(f"Unique modules: {len(all_imports)}")
-        
+
         return "\n".join(relationships)
-    
+
     def _extract_historical_patterns(self, historical_data: str) -> str:
         """Extract relevant patterns from historical data."""
         patterns = []
-        
+
         # Extract PR patterns
         pr_pattern = r"PR #(\d+): ([^\n]+)"
         pr_matches = re.findall(pr_pattern, historical_data)
-        
+
         if pr_matches:
             patterns.append(f"Historical PRs: {len(pr_matches)} patterns found")
             # Analyze common issue types
             common_issues = self._analyze_common_issues(pr_matches)
             patterns.append(f"Common issues: {common_issues}")
-        
+
         # Extract recurring themes
         if "security" in historical_data.lower():
-            patterns.append("Security patterns: Multiple security-related reviews detected")
+            patterns.append(
+                "Security patterns: Multiple security-related reviews detected"
+            )
         if "performance" in historical_data.lower():
-            patterns.append("Performance patterns: Performance optimization requests found")
+            patterns.append(
+                "Performance patterns: Performance optimization requests found"
+            )
         if "refactor" in historical_data.lower():
-            patterns.append("Refactoring patterns: Code quality improvement trends detected")
-        
+            patterns.append(
+                "Refactoring patterns: Code quality improvement trends detected"
+            )
+
         return "\n".join(patterns) if patterns else "No historical patterns detected"
-    
+
     def _analyze_common_issues(self, pr_matches: List[Tuple[str, str]]) -> str:
         """Analyze common issues from PR titles."""
         issues = []
         title_lower = [title.lower() for _, title in pr_matches]
-        
+
         # Count common keywords
         keywords = ["bug", "fix", "performance", "security", "refactor", "test", "docs"]
         for keyword in keywords:
             count = sum(1 for title in title_lower if keyword in title)
             if count > 0:
                 issues.append(f"{keyword}: {count} occurrences")
-        
+
         return ", ".join(issues) if issues else "no common patterns"
-    
+
     def _calculate_confidence_score(self, context_data: ContextData, result) -> float:
         """Calculate confidence score based on input quality and completeness."""
         score = 0.7  # Base score
@@ -452,25 +538,29 @@ class ContextEngineeringAgent(dspy.Module):
             score += 0.05
 
             # Additional boost if DeepWiki is available
-            if (context_data.hybrid_context.deepwiki_context and
-                context_data.hybrid_context.deepwiki_context.available):
+            if (
+                context_data.hybrid_context.deepwiki_context
+                and context_data.hybrid_context.deepwiki_context.available
+            ):
                 score += 0.10
 
                 # Extra boost for rich DeepWiki content
                 if context_data.hybrid_context.deepwiki_context.architectural_overview:
                     score += 0.03
-                if context_data.hybrid_context.deepwiki_context.patterns_and_conventions:
+                if (
+                    context_data.hybrid_context.deepwiki_context.patterns_and_conventions
+                ):
                     score += 0.02
 
         # Ensure score stays within bounds
         return min(1.0, score)
-    
+
     def _count_historical_prs(self, historical_data: str) -> int:
         """Count number of historical PRs in the data."""
         pr_pattern = r"PR #(\d+)"
         matches = re.findall(pr_pattern, historical_data)
         return len(matches)
-    
+
     def _load_language_patterns(self) -> Dict[str, Dict[str, str]]:
         """Load language-specific patterns for analysis."""
         return {
@@ -488,35 +578,38 @@ class ContextEngineeringAgent(dspy.Module):
                 "test_patterns": ["describe(", "it(", "expect(", "test("],
                 "security_patterns": ["eval(", "innerHTML", "document.write"],
                 "performance_patterns": ["for(", "forEach", "map("],
-            }
+            },
         }
-    
+
     def get_risk_assessment(self, context_data: ContextData) -> Dict[str, Any]:
         """Generate risk assessment for the code changes."""
         risk_factors = {
             "complexity": "medium",
             "security_risk": "low",
             "performance_risk": "low",
-            "test_coverage": "unknown"
+            "test_coverage": "unknown",
         }
-        
+
         # Analyze code complexity
         if "complex" in context_data.code_changes.lower():
             risk_factors["complexity"] = "high"
-        
+
         # Analyze security patterns
         security_keywords = ["eval", "exec", "sql", "command", "shell"]
-        if any(keyword in context_data.code_changes.lower() for keyword in security_keywords):
+        if any(
+            keyword in context_data.code_changes.lower()
+            for keyword in security_keywords
+        ):
             risk_factors["security_risk"] = "medium"
-        
+
         # Analyze test coverage
         if "test" in context_data.code_changes.lower():
             risk_factors["test_coverage"] = "present"
         else:
             risk_factors["test_coverage"] = "missing"
-        
+
         return risk_factors
-    
+
     def extract_code_metrics(self, code_changes: str) -> Dict[str, int]:
         """Extract code metrics from changes."""
         metrics = {
@@ -524,19 +617,19 @@ class ContextEngineeringAgent(dspy.Module):
             "lines_deleted": 0,
             "files_changed": 0,
             "functions_defined": 0,
-            "classes_defined": 0
+            "classes_defined": 0,
         }
-        
-        lines = code_changes.split('\n')
+
+        lines = code_changes.split("\n")
         for line in lines:
-            if line.strip().startswith('+'):
+            if line.strip().startswith("+"):
                 metrics["lines_added"] += 1
-            elif line.strip().startswith('-'):
+            elif line.strip().startswith("-"):
                 metrics["lines_deleted"] += 1
-        
+
         # Count AST elements
         for line in lines[:100]:  # Limit for performance
-            if line.strip().startswith('+') or line.strip().startswith('-'):
+            if line.strip().startswith("+") or line.strip().startswith("-"):
                 code_content = line.strip()[1:].strip()
                 try:
                     tree = ast.parse(code_content)
@@ -547,7 +640,7 @@ class ContextEngineeringAgent(dspy.Module):
                             metrics["classes_defined"] += 1
                 except:
                     pass
-        
+
         return metrics
 
     def _enrich_with_hybrid_context(self, context_data: ContextData) -> str:
@@ -568,14 +661,17 @@ class ContextEngineeringAgent(dspy.Module):
             return ""
 
         # Initialize or reuse hybrid provider
-        if not self.hybrid_provider or self.hybrid_provider.project_root != context_data.project_root:
+        if (
+            not self.hybrid_provider
+            or self.hybrid_provider.project_root != context_data.project_root
+        ):
             from .. import config
 
             self.hybrid_provider = HybridContextProvider(
                 project_root=context_data.project_root,
                 repo_name=context_data.repository_name,
                 enable_deepwiki=config.DEEPWIKI_ENABLED,
-                cache_ttl=config.GRAPH_CACHE_TTL
+                cache_ttl=config.GRAPH_CACHE_TTL,
             )
             logger.info(
                 f"Initialized HybridContextProvider for {context_data.project_root}"
@@ -615,23 +711,23 @@ class ContextEngineeringAgent(dspy.Module):
         changed_files = []
 
         # Try to parse diff format
-        lines = code_changes.split('\n')
+        lines = code_changes.split("\n")
         for line in lines:
             # Match diff headers: +++ b/path/to/file or --- a/path/to/file
-            if line.startswith('+++') or line.startswith('---'):
+            if line.startswith("+++") or line.startswith("---"):
                 # Extract file path
                 parts = line.split(maxsplit=1)
                 if len(parts) > 1:
                     file_path = parts[1]
                     # Remove a/ or b/ prefix
-                    if file_path.startswith(('a/', 'b/')):
+                    if file_path.startswith(("a/", "b/")):
                         file_path = file_path[2:]
-                    if file_path and file_path != '/dev/null':
+                    if file_path and file_path != "/dev/null":
                         changed_files.append(file_path)
 
             # Also try File: format
-            elif line.startswith('File:'):
-                file_path = line.replace('File:', '').strip()
+            elif line.startswith("File:"):
+                file_path = line.replace("File:", "").strip()
                 if file_path:
                     changed_files.append(file_path)
 
