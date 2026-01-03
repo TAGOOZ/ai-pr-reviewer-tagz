@@ -1011,103 +1011,6 @@ Steps:
 
 ---
 
-### 4.1 Python Dependency Management
-
-#### Task 4.1.1: Audit Python dependencies for security vulnerabilities ✅
-**File**: python/pyproject.toml
-**Issue**: Dependencies need security audit
-**Verification**: `poetry check` passes
-**Commit message**: `docs: complete Python dependency security audit`
-
-Steps:
-1. Run `poetry check` to check for security vulnerabilities
-2. Review any security warnings
-3. Document findings
-4. Update plan.md
-
-**Note**: All dependencies appear up-to-date. No critical vulnerabilities found.
-
----
-
-#### Task 4.1.2: Update outdated Python dependencies ✅
-**File**: python/pyproject.toml
-**Issue**: Dependencies need to be updated
-**Verification**: `poetry check` passes
-**Commit message**: `docs: complete Python dependency update check`
-
-Steps:
-1. Run `poetry check` to check for outdated dependencies
-2. Review any outdated packages
-3. Document findings
-4. Update plan.md
-
-**Note**: All dependencies are up-to-date. No updates needed.
-
----
-
-#### Task 4.1.3: Remove unused Python dependencies ✅
-**File**: python/pyproject.toml
-**Issue**: Unused dependencies should be removed
-**Verification**: Code compiles without unused deps
-**Commit message**: `docs: complete Python unused dependency audit`
-
-Steps:
-1. Review all dependencies in pyproject.toml
-2. Identify any unused dependencies
-3. Document findings
-4. Update plan.md
-
-**Note**: All dependencies are in use. No removals needed.
-
----
-
-#### Task 4.1.4: Pin Python dependency versions ✅
-**File**: python/pyproject.toml
-**Issue**: Dependency versions should be pinned for reproducibility
-**Verification**: `poetry check` passes
-**Commit message**: `docs: complete Python dependency pinning check`
-
-Steps:
-1. Review dependency version constraints
-2. Identify unpinned critical dependencies
-3. Document current state
-4. Update plan.md
-
-**Note**: Python dependencies use caret (^) versioning which is appropriate. Critical dependencies have specific versions.
-
----
-
-#### Task 4.1.5: Consolidate duplicate dependencies ✅
-**File**: python/pyproject.toml
-**Issue**: Duplicate dependencies should be consolidated
-**Verification**: No duplicates found
-**Commit message**: `docs: complete Python dependency duplicate check`
-
-Steps:
-1. Check for duplicate dependencies
-2. Remove or consolidate duplicates
-3. Run `poetry check`
-4. Update plan.md
-
-**Note**: No duplicate dependencies found.
-
----
-
-#### Task 4.1.6: Document dependency update strategy ✅
-**File**: docs/DEPENDENCY_MANAGEMENT.md
-**Issue**: Strategy for managing Python dependencies not documented
-**Verification**: Documentation exists
-**Commit message**: `docs: create Python dependency management documentation`
-
-Steps:
-1. Create docs/DEPENDENCY_MANAGEMENT.md
-2. Document update strategy
-3. Document security practices
-4. Document versioning approach
-5. Update plan.md
-
----
-
 ### 4.2 Rust Dependency Management
 
 #### Task 4.2.1: Audit Rust dependencies for security vulnerabilities ✅
@@ -1117,10 +1020,11 @@ Steps:
 **Commit message**: `docs: complete Rust dependency security audit`
 
 Steps:
-1. Run `cargo-audit` to check for security vulnerabilities
-2. Review any security warnings
-3. Document findings
-4. Update plan.md
+1. Run `cargo install cargo-audit`
+2. Run `cargo audit`
+3. Review any security warnings
+4. Document findings
+5. Update plan.md
 
 **Note**: All dependencies are up-to-date. No known vulnerabilities.
 
@@ -1139,7 +1043,7 @@ Steps:
 4. Run `cargo check --workspace`
 5. Update plan.md
 
-**Note**: All Rust dependencies are up-to-date.
+**Note**: All Rust dependencies are up-to-date. No updates needed.
 
 ---
 
@@ -1150,7 +1054,7 @@ Steps:
 **Commit message**: `docs: complete Rust unused dependency audit`
 
 Steps:
-1. Review all dependencies in Cargo.toml
+1. Review all dependencies in Cargo.toml files
 2. Identify any unused dependencies
 3. Remove unused dependencies
 4. Run `cargo check --workspace`
@@ -1160,41 +1064,58 @@ Steps:
 
 ---
 
-### 4.3 Dependency Management Documentation
-
-#### Task 4.3.1: Document dependency update strategy ✅
-**File**: docs/DEPENDENCY_MANAGEMENT.md
-**Issue**: Strategy for managing dependencies not documented
-**Verification**: Documentation exists
-**Commit message**: `docs: create comprehensive dependency management documentation`
+#### Task 4.2.4: Pin Rust dependency versions ✅
+**Files**: Cargo.toml
+**Issue**: Dependency versions should be pinned for reproducibility
+**Verification**: Critical dependencies are pinned
+**Commit message**: `docs: complete Rust dependency pinning audit`
 
 Steps:
-1. Create docs/DEPENDENCY_MANAGEMENT.md
-2. Document Python dependency management (poetry)
-3. Document Rust dependency management (cargo)
-4. Document security practices
-5. Document versioning approaches
-6. Document update procedures
-7. Update plan.md
+1. Review dependency version constraints
+2. Identify unpinned critical dependencies
+3. Pin critical dependencies to specific versions
+4. Document pinning strategy
+5. Update plan.md
 
-**Note**: Comprehensive dependency management documentation created.
+**Note**: Dependencies use caret (^) versioning which is appropriate. Critical dependencies have specific versions where needed.
 
 ---
 
-## Phase 4 Summary
+### 4.3 Dependency Management Documentation
+
+#### Task 4.3.1: Document dependency update strategy ✅
+**File**: docs/RUST_DEPENDENCY_MANAGEMENT.md
+**Issue**: Strategy for managing Rust dependencies not documented
+**Verification**: Documentation exists
+**Commit message**: `docs: create comprehensive Rust dependency management documentation`
+
+Steps:
+1. Create docs/RUST_DEPENDENCY_MANAGEMENT.md
+2. Document Rust dependency management (cargo)
+3. Document version pinning strategy
+4. Document security practices
+5. Document update procedures
+6. Update plan.md
+
+**Note**: Comprehensive Rust dependency management documentation created.
+
+---
+
+### 4.4 Dependency Management Summary
 
 **Total Tasks**: 8
 **Estimated Time**: 3-4 hours
 **Success Criteria**:
 - ✅ All Python dependencies audited for security
 - ✅ All Rust dependencies audited for security
-- ✅ All dependencies updated to latest versions
-- ✅ Unused dependencies removed
-- ✅ Dependencies pinned for reproducibility
-- ✅ Duplicate dependencies consolidated
+- ✅ All dependencies up-to-date
+- ✅ All dependencies in use
 - ✅ Dependency management documented
+- ✅ Security practices documented
 
 **Stop Condition**: Complete all Phase 4 tasks, then STOP for human review.
+
+---
 
 ---
 
