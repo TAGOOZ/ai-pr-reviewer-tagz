@@ -644,7 +644,7 @@ Steps:
 
 ---
 
-#### Task 3.1.5: Add tests for python/coderabbit_ai/integrations/context_adapter.py ☐
+#### Task 3.1.5: Add tests for python/coderabbit_ai/integrations/context_adapter.py ✅
 **Issue**: No tests for context adapter
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for context_adapter.py`
