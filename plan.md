@@ -659,7 +659,7 @@ Steps:
 
 ---
 
-#### Task 3.1.6: Add tests for python/coderabbit_ai/integrations/devin_client.py ☐
+#### Task 3.1.6: Add tests for python/coderabbit_ai/integrations/devin_client.py ✅
 **Issue**: No tests for Devin client
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for devin_client.py`
