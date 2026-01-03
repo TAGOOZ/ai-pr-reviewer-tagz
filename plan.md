@@ -674,7 +674,7 @@ Steps:
 
 ---
 
-#### Task 3.1.7: Add tests for python/coderabbit_ai/integrations/hybrid_context_provider.py ☐
+#### Task 3.1.7: Add tests for python/coderabbit_ai/integrations/hybrid_context_provider.py ✅
 **Issue**: No tests for hybrid context provider
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for hybrid_context_provider.py`
