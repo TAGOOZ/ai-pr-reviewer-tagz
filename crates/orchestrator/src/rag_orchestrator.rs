@@ -191,7 +191,7 @@ impl RagOrchestrator {
     /// Prepare review context using RAG
     pub async fn prepare_review_context(
         &self,
-        code_snippet: &str,
+        _code_snippet: &str,
         language: &str,
         repository_id: &str,
     ) -> Result<CodeContext> {

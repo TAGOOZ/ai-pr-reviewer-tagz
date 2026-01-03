@@ -176,10 +176,19 @@ impl RedisOrchestrator {
         let response = match job {
             Job::ReviewRequest {
                 metadata,
-                request,
+                _request,
                 response_tx,
             } => {
                 let result = format!("Review processed successfully for job {}", metadata.job_id);
+                let _ = response_tx.send(result.clone());
+                result
+            }
+            Job::AnalysisRequest {
+                metadata,
+                _request,
+                response_tx,
+            } => {
+                let result = format!("Analysis completed for job {}", metadata.job_id);
                 let _ = response_tx.send(result.clone());
                 result
             }
