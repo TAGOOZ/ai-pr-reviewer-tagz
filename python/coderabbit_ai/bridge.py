@@ -33,7 +33,7 @@ def call_static_analyzer(file_path: str, language: str, content: str) -> Optiona
         # Call the Rust analyzer (assuming it's compiled and in PATH)
         # In production, this would call the actual crates/code-analyzer binary
         result = subprocess.run(
-            ['cargo', 'run', '--bin', 'code-analyzer', '--quiet'],
+            ["cargo", "run", "--bin", "code-analyzer", "--quiet"],
             input=json.dumps(input_data),
             capture_output=True,
             text=True,

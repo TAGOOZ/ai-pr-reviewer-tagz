@@ -720,7 +720,7 @@ Steps:
 
 ---
 
-#### Task 3.1.10: Add tests for python/coderabbit_ai/bridge.py ☐
+#### Task 3.1.10: Add tests for python/coderabbit_ai/bridge.py ✅
 **Issue**: No tests for Python-Rust bridge
 **Verification**: `poetry run pytest tests/` passes
 **Commit message**: `test: add unit tests for bridge.py`
