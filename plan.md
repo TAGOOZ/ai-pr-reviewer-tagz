@@ -360,7 +360,7 @@ Steps:
 
 ---
 
-#### Task 2.2.2: Remove code duplication in Python ☐
+#### Task 2.2.2: Remove code duplication in Python ✅
 **File**: python/coderabbit_ai/pipeline.py
 **Issue**: Duplicate methods _comments_to_security_findings and _parse_line_numbers_from_diffs
 **Verification**: Code functionality preserved after deduplication
