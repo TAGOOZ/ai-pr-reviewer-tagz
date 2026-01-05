@@ -11,7 +11,7 @@ pub fn create_routes() -> Router<database::DatabaseState> {
     Router::new()
         .route("/health", get(health::health_check))
         // GitHub integration routes
-        .route("/webhook/github", post(github::github_webhook))
+        .route("/webhook/github", post(webhook::github_webhook))
         .route(
             "/webhook/github/comment",
             post(comment_handler::handle_comment_webhook),

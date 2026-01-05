@@ -1,5 +1,6 @@
-use axum::{serve, Router};
+use axum::{serve, Router, Extension};
 use coderabbit_shared::{AppConfig, CodeRabbitError, Result};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
@@ -51,11 +52,22 @@ impl ApiGateway {
         };
         let db_state = DatabaseState::new(db_config).await;
 
+        // Initialize orchestrator
+        let redis_url = &self.config.redis.url;
+        let orchestrator = coderabbit_orchestrator::RedisOrchestrator::new(redis_url)
+            .map_err(|e| CodeRabbitError::InternalError(format!("Failed to initialize orchestrator: {}", e)))?;
+        let orchestrator = Arc::new(orchestrator);
+
+        // Wrap config in Arc
+        let config = Arc::new(self.config.clone());
+
         let routes = create_routes();
 
         Ok(Router::new()
             .nest("/api/v1", routes)
             .with_state(db_state)
+            .layer(Extension(orchestrator))
+            .layer(Extension(config))
             .layer(middleware))
     }
 }
