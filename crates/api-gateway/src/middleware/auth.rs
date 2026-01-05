@@ -169,7 +169,13 @@ impl AuthLayer {
     }
 
     pub fn from_env() -> Self {
-        Self::new(AuthContext::from_env())
+        let auth_ctx = AuthContext::from_env();
+        let skip_auth = std::env::var("SKIP_AUTH")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            == "true";
+
+        Self::with_skip_auth(auth_ctx, skip_auth)
     }
 
     pub fn with_skip_auth(auth_ctx: AuthContext, skip_auth: bool) -> Self {
