@@ -53,7 +53,7 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct AIConfig {
-    #[validate(custom = "validate_api_key")]
+    #[validate(custom = "validate_optional_api_key")]  // Optional - can use Gemini/other providers
     pub openai_api_key: String,
 
     #[validate(custom = "validate_optional_api_key")]
@@ -275,8 +275,7 @@ impl AppConfig {
                 connection_timeout: get_env_parse("REDIS_CONNECTION_TIMEOUT", 30).unwrap_or(30),
             },
             ai: AIConfig {
-                openai_api_key: env::var("OPENAI_API_KEY")
-                    .map_err(|_| CRConfigError::Required("OPENAI_API_KEY is required".into()))?,
+                openai_api_key: get_env("OPENAI_API_KEY", ""),  // Optional - can use Gemini/other providers
                 anthropic_api_key: get_env("ANTHROPIC_API_KEY", ""),
                 cohere_api_key: env::var("COHERE_API_KEY").ok(),
                 default_model: get_env("OPENAI_MODEL", "gpt-4"),
