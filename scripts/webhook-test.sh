@@ -155,7 +155,7 @@ start_ngrok() {
     sleep 3
     
     # Get the public URL from ngrok API
-    NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | grep -oP '"public_url":"https://[^"]+' | head -1 | cut -d'"' -f4)
+    NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | grep -oE '"public_url":"https://[^"]+' | head -1 | cut -d'"' -f4)
     
     if [ -z "$NGROK_URL" ]; then
         log_error "Failed to get ngrok URL. Check $NGROK_LOG for details."
