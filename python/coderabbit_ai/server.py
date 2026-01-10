@@ -112,7 +112,7 @@ async def lifespan(app: FastAPI) -> None:
     else:
         logger.warning("OPENAI_API_KEY not set, using dummy configuration")
         # Use a dummy LM for development
-        dspy.settings.configure(lm=dspy.DummyLM())
+        # dspy.settings.configure(lm=dspy.DummyLM())
 
     # Initialize pipeline
     config = {

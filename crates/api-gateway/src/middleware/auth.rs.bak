@@ -169,13 +169,7 @@ impl AuthLayer {
     }
 
     pub fn from_env() -> Self {
-        let auth_ctx = AuthContext::from_env();
-        let skip_auth = std::env::var("SKIP_AUTH")
-            .unwrap_or_else(|_| "false".to_string())
-            .to_lowercase()
-            == "true";
-
-        Self::with_skip_auth(auth_ctx, skip_auth)
+        Self::new(AuthContext::from_env())
     }
 
     pub fn with_skip_auth(auth_ctx: AuthContext, skip_auth: bool) -> Self {
@@ -220,14 +214,20 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, mut request: Request) -> Self::Future {
+/.if skip_auth {/if skip_auth || request.uri().path().contains("/webhook") {
+                return inner.call(request).await;
+            }/
         let skip_auth = self.skip_auth;
         let auth_ctx = self.auth_ctx.clone();
-        let mut inner = self.inner.clone();
 
         Box::pin(async move {
             // Skip auth for webhooks
-            if skip_auth || request.uri().path().contains("/webhook") {
+            if request.uri().path().contains("/webhook") {
+                return inner.call(request).await;
+            }
+            // Skip authentication if configured (dev mode)
+            if skip_auth {
+                tracing::debug!("Authentication skipped (dev mode)");
                 return inner.call(request).await;
             }
 

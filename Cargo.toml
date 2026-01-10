@@ -44,7 +44,7 @@ walkdir = "2.5"
 
 # Code analysis
 tree-sitter = "0.20"
-tree-sitter-rust = "0.20"
+tree-sitter-rust = "=0.20.0"
 tree-sitter-typescript = "0.20"
 tree-sitter-python = "0.20"
 tree-sitter-java = "0.20"
